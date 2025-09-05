@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ApiResponse, ApiError } from '../types';
+import { ApiResponse, ApiError } from '../../types';
 
 /**
  * Custom Error Class
@@ -79,13 +79,18 @@ export const errorHandler = (
     timestamp: new Date().toISOString(),
   });
 
-  // Send error response
+  // Send error response (prevent information leakage in production)
   const response: ApiResponse = {
     success: false,
-    message: isOperational ? message : 'Something went wrong',
+    message: isOperational ? message : 'Internal server error',
     error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     timestamp: new Date().toISOString(),
   };
+
+  // Remove sensitive headers in production
+  if (process.env.NODE_ENV === 'production') {
+    res.removeHeader('X-Powered-By');
+  }
 
   res.status(statusCode).json(response);
 };

@@ -9,12 +9,12 @@ import {
   getUserStats,
   searchUsers,
   exportUserData,
-} from '../controllers/userController';
+} from '../controllers/user/userController';
 import {
   validateUserUpdate,
   handleValidationErrors,
-} from '../middleware/validation';
-import { authenticateJWT, requireRole } from '../middleware/auth';
+} from '../middleware/validation/validation';
+import { authenticateJWT, requireRole } from '../middleware/auth/auth';
 
 const router = Router();
 

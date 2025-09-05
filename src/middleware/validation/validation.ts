@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { body, validationResult, ValidationChain } from 'express-validator';
-import { ApiResponse, ValidationError } from '../types';
+import { ApiResponse, ValidationError } from '../../types';
 
 /**
  * Validation Error Handler

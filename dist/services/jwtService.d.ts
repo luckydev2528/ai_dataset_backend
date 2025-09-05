@@ -1,4 +1,4 @@
-import { JWTPayload, User } from '../types';
+import { JWTPayload, User } from '../../types';
 export declare class JWTService {
     static generateToken(user: User): string;
     static verifyToken(token: string): JWTPayload;

@@ -1,7 +1,7 @@
 import { Response } from 'express';
-import { AuthenticatedRequest, ApiResponse, UpdateUserData } from '../types';
-import { updateUser, deleteUser, getUserByUid } from '../services/firebaseAdmin';
-import { asyncHandler, AppError } from '../middleware/errorHandler';
+import { AuthenticatedRequest, ApiResponse, UpdateUserData } from '../../types';
+import { updateUser, deleteUser, getUserByUid } from '../../services/auth/firebaseAdmin';
+import { asyncHandler, AppError } from '../../middleware/error/errorHandler';
 
 /**
  * Get current user profile

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --requirepass "ibVaQQR5XXLFRxgP3zaOsexfdMIJZpnaAAyfW14pUU9gmxE8YnHrkfA8segMuzP3Su+onYuAPro18/doLAGDIw=="
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "ibVaQQR5XXLFRxgP3zaOsexfdMIJZpnaAAyfW14pUU9gmxE8YnHrkfA8segMuzP3Su+onYuAPro18/doLAGDIw==", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:

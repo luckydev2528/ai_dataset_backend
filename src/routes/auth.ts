@@ -5,11 +5,14 @@ import {
   socialAuth,
   sendPasswordReset,
   confirmPasswordReset,
-  refreshToken,
-  logout,
+  refreshAccessToken,
+  logoutUser,
   getProfile,
   verifyToken,
-} from '../controllers/authController';
+  getUserSessions,
+  revokeSession,
+  revokeOtherSessions,
+} from '../controllers/auth/authController';
 import {
   validateRegistration,
   validateLogin,
@@ -17,8 +20,8 @@ import {
   validatePasswordReset,
   validatePasswordResetConfirm,
   handleValidationErrors,
-} from '../middleware/validation';
-import { authenticateJWT } from '../middleware/auth';
+} from '../middleware/validation/validation';
+import { authenticateJWT } from '../middleware/auth/auth';
 
 const router = Router();
 
@@ -60,16 +63,16 @@ router.post('/password-reset/confirm', validatePasswordResetConfirm(), handleVal
 /**
  * @route   POST /api/auth/refresh
  * @desc    Refresh JWT token
- * @access  Private
+ * @access  Public (requires refresh token in body)
  */
-router.post('/refresh', authenticateJWT, refreshToken);
+router.post('/refresh', refreshAccessToken);
 
 /**
  * @route   POST /api/auth/logout
  * @desc    Logout user
  * @access  Private
  */
-router.post('/logout', authenticateJWT, logout);
+router.post('/logout', authenticateJWT, logoutUser);
 
 /**
  * @route   GET /api/auth/profile
@@ -84,5 +87,26 @@ router.get('/profile', authenticateJWT, getProfile);
  * @access  Public
  */
 router.post('/verify', verifyToken);
+
+/**
+ * @route   GET /api/auth/sessions
+ * @desc    Get user sessions
+ * @access  Private
+ */
+router.get('/sessions', authenticateJWT, getUserSessions);
+
+/**
+ * @route   DELETE /api/auth/sessions/:sessionId
+ * @desc    Revoke a specific session
+ * @access  Private
+ */
+router.delete('/sessions/:sessionId', authenticateJWT, revokeSession);
+
+/**
+ * @route   POST /api/auth/sessions/revoke-others
+ * @desc    Revoke all other sessions (keep current session active)
+ * @access  Private
+ */
+router.post('/sessions/revoke-others', authenticateJWT, revokeOtherSessions);
 
 export default router;

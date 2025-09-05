@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
-import { AuthenticatedRequest, ApiResponse } from '../types';
-import { JWTService } from '../services/jwtService';
-import { verifyIdToken, getUserByUid } from '../services/firebaseAdmin';
+import { AuthenticatedRequest, ApiResponse } from '../../types';
+import { JWTService } from '../../services/auth/jwtService';
+import { verifyIdToken, getUserByUid } from '../../services/auth/firebaseAdmin';
 
 /**
  * JWT Authentication Middleware
@@ -27,7 +27,7 @@ export const authenticateJWT = async (
     }
 
     // Verify JWT token
-    const payload = JWTService.verifyToken(token);
+    const payload = await JWTService.verifyToken(token);
 
     // Get user from Firebase
     const firebaseUser = await getUserByUid(payload.uid);
@@ -60,6 +60,7 @@ export const authenticateJWT = async (
     };
     
     res.status(401).json(response);
+    return;
   }
 };
 
@@ -140,6 +141,7 @@ export const authenticateFirebase = async (
     };
     
     res.status(401).json(response);
+      return;
   }
 };
 
@@ -163,7 +165,7 @@ export const optionalAuth = async (
 
     // Try to verify token
     try {
-      const payload = JWTService.verifyToken(token);
+      const payload = await JWTService.verifyToken(token);
       const firebaseUser = await getUserByUid(payload.uid);
 
       const user = {

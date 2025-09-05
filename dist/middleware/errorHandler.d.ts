@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ApiResponse, ApiError } from '../types';
+import { ApiResponse, ApiError } from '../../types';
 export declare class AppError extends Error implements ApiError {
     statusCode: number;
     isOperational: boolean;

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"
@@ -31,10 +31,13 @@
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
     "firebase-admin": "^12.0.0",
-    "helmet": "^7.1.0",
+    "helmet": "^7.2.0",
+    "ioredis": "^5.7.0",
     "joi": "^17.11.0",
     "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "pg": "^8.16.3",
+    "redis": "^5.8.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -1,6 +1,6 @@
 import admin from 'firebase-admin';
 import { ServiceAccount } from 'firebase-admin';
-import { CustomClaims, SocialProviderData } from '../types';
+import { CustomClaims, SocialProviderData } from '../../types';
 
 let firebaseAdmin: admin.app.App | null = null;
 
@@ -18,35 +18,39 @@ export const initializeFirebaseAdmin = (): admin.app.App | null => {
 
     console.log('🔍 Initializing Firebase Admin...');
 
-    // Try to load the service account from the JSON file first
-    const serviceAccountPath = './datarefinery-6db5e-firebase-adminsdk-fbsvc-408eea0d7c.json';
+    // Check if environment variables are available first (preferred method)
+    const hasEnvVars = process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL;
     
-    try {
-      // Initialize Firebase Admin using the service account JSON file
-      firebaseAdmin = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccountPath),
-        projectId: 'datarefinery-6db5e',
-      });
-      
-      console.log('✅ Firebase Admin initialized successfully using service account JSON file');
-      return firebaseAdmin;
-    } catch (jsonError) {
-      console.log('⚠️ Failed to load service account JSON file, falling back to environment variables');
-      console.log('JSON Error:', jsonError instanceof Error ? jsonError.message : String(jsonError));
-      
-      // Fallback to environment variables
-      console.log('🔍 Debugging Firebase Admin initialization from environment variables:');
+    if (hasEnvVars) {
+      console.log('🔍 Using Firebase Admin configuration from environment variables');
       console.log('FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID ? 'Set' : 'Not set');
       console.log('FIREBASE_PRIVATE_KEY:', process.env.FIREBASE_PRIVATE_KEY ? 'Set' : 'Not set');
       console.log('FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL ? 'Set' : 'Not set');
-
-      // Check if required environment variables are present
-      if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_PRIVATE_KEY || !process.env.FIREBASE_CLIENT_EMAIL) {
-        console.warn('⚠️ Firebase environment variables not set. Firebase Admin will not be initialized.');
-        console.warn('Required variables: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL');
+    } else {
+      console.log('⚠️ Firebase environment variables not set, trying service account JSON file');
+      console.log('Required variables: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL');
+      
+      // Fallback to JSON file if environment variables are not available
+      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './datarefinery-6db5e-firebase-adminsdk-fbsvc-408eea0d7c.json';
+      
+      try {
+        // Initialize Firebase Admin using the service account JSON file
+        firebaseAdmin = admin.initializeApp({
+          credential: admin.credential.cert(serviceAccountPath),
+          projectId: process.env.FIREBASE_PROJECT_ID || 'datarefinery-6db5e',
+        });
+        
+        console.log('✅ Firebase Admin initialized successfully using service account JSON file');
+        return firebaseAdmin;
+      } catch (jsonError) {
+        console.error('❌ Failed to load service account JSON file:', jsonError instanceof Error ? jsonError.message : String(jsonError));
+        console.warn('⚠️ Firebase Admin will not be initialized. Please set environment variables or provide a valid service account file.');
         return null;
       }
+    }
 
+    // Initialize using environment variables
+    try {
       // Get Firebase service account from environment variables
       let privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
       
@@ -77,11 +81,11 @@ export const initializeFirebaseAdmin = (): admin.app.App | null => {
         }
       }
 
-      // Create service account object
+      // Create service account object with proper type assertions
       const serviceAccount: ServiceAccount = {
-        projectId: process.env.FIREBASE_PROJECT_ID,
+        projectId: process.env.FIREBASE_PROJECT_ID!,
         privateKey: privateKey,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
       };
 
       console.log('🔧 Initializing Firebase Admin with project:', process.env.FIREBASE_PROJECT_ID);
@@ -89,11 +93,15 @@ export const initializeFirebaseAdmin = (): admin.app.App | null => {
       // Initialize Firebase Admin
       firebaseAdmin = admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        projectId: process.env.FIREBASE_PROJECT_ID,
+        projectId: process.env.FIREBASE_PROJECT_ID!,
       });
 
       console.log('✅ Firebase Admin initialized successfully using environment variables');
       return firebaseAdmin;
+    } catch (error) {
+      console.error('❌ Failed to initialize Firebase Admin with environment variables:', error);
+      console.warn('⚠️ Continuing without Firebase Admin. Some features may not work.');
+      return null;
     }
   } catch (error) {
     console.error('❌ Failed to initialize Firebase Admin:', error);
@@ -133,28 +141,7 @@ export const verifyIdToken = async (idToken: string): Promise<admin.auth.Decoded
     console.log('🔄 verifyIdToken called with token length:', idToken?.length);
     const auth = getAuth();
     if (!auth) {
-      console.warn('⚠️ Firebase Auth not initialized, attempting to decode token manually');
-      // Fallback: try to decode the JWT token manually
-      // This is a basic implementation - in production you should verify the signature
-      const parts = idToken.split('.');
-      if (parts.length !== 3) {
-        throw new Error('Invalid ID token format');
-      }
-      
-      const payload = JSON.parse(Buffer.from(parts[1] || '', 'base64').toString());
-      
-      // Basic validation
-      if (!payload.uid || !payload.email) {
-        throw new Error('Invalid token payload');
-      }
-      
-      // Check if token is expired
-      if (payload.exp && payload.exp < Date.now() / 1000) {
-        throw new Error('ID token has expired');
-      }
-      
-      console.log('✅ Manual token decode successful');
-      return payload as admin.auth.DecodedIdToken;
+      throw new Error('Firebase Auth not initialized. Please check your Firebase configuration.');
     }
     console.log('🔄 Using Firebase Auth to verify token...');
     const decodedToken = await auth.verifyIdToken(idToken);
@@ -165,32 +152,7 @@ export const verifyIdToken = async (idToken: string): Promise<admin.auth.Decoded
     
     // Handle audience mismatch error specifically
     if (error.code === 'auth/argument-error' && error.message.includes('audience')) {
-      console.warn('⚠️ Audience mismatch detected, trying manual token decode as fallback');
-      try {
-        // Fallback to manual token decode
-        const parts = idToken.split('.');
-        if (parts.length !== 3) {
-          throw new Error('Invalid ID token format');
-        }
-        
-        const payload = JSON.parse(Buffer.from(parts[1] || '', 'base64').toString());
-        
-        // Basic validation
-        if (!payload.uid || !payload.email) {
-          throw new Error('Invalid token payload');
-        }
-        
-        // Check if token is expired
-        if (payload.exp && payload.exp < Date.now() / 1000) {
-          throw new Error('ID token has expired');
-        }
-        
-        console.log('✅ Manual token decode successful as fallback');
-        return payload as admin.auth.DecodedIdToken;
-      } catch (manualError) {
-        console.error('❌ Manual token decode also failed:', manualError);
-        throw new Error('Invalid ID token - audience mismatch and manual decode failed');
-      }
+      throw new Error('Invalid ID token - audience mismatch. Please check your Firebase project configuration.');
     }
     
     // Handle specific Firebase permission errors

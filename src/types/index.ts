@@ -66,6 +66,8 @@ export interface JWTPayload {
   type: 'email' | 'google' | 'twitter' | 'facebook';
   iat: number;
   exp: number;
+  jti?: string; // JWT ID for tracking
+  deviceId?: string; // Device identifier
 }
 
 // Express Request with User

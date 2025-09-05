@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { AuthenticatedRequest, ApiResponse, LoginRequest, RegisterRequest, SocialAuthRequest, PasswordResetRequest, PasswordResetConfirmRequest } from '../types';
-import { JWTService } from '../services/jwtService';
+import { AuthenticatedRequest, ApiResponse, LoginRequest, RegisterRequest, SocialAuthRequest, PasswordResetRequest, PasswordResetConfirmRequest } from '../../types';
+import { JWTService } from '../../services/auth/jwtService';
 import { 
   createUser, 
   getUserByEmail, 
@@ -10,8 +10,9 @@ import {
   verifyIdToken,
   getUserByUid,
   createCustomToken
-} from '../services/firebaseAdmin';
-import { asyncHandler, AppError } from '../middleware/errorHandler';
+} from '../../services/auth/firebaseAdmin';
+import { asyncHandler, AppError } from '../../middleware/error/errorHandler';
+import SessionService from '../../services/session/SessionService';
 
 /**
  * Register new user with email and password
@@ -32,7 +33,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     displayName: name,
   });
 
-  // Generate JWT token
+  // Generate JWT tokens
   const user = {
     id: firebaseUser.uid,
     email: firebaseUser.email || '',
@@ -44,7 +45,17 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     isActive: !firebaseUser.disabled,
   };
 
-  const token = JWTService.generateToken(user);
+  const deviceId = req.headers['x-device-id'] as string;
+  const token = JWTService.generateToken(user, deviceId);
+  const refreshToken = await JWTService.generateRefreshToken(user, deviceId);
+  
+  // Create session
+  const sessionId = await SessionService.createSession(
+    user.id,
+    deviceId,
+    req.ip || 'unknown',
+    req.get('User-Agent') || 'unknown'
+  );
 
   const response: ApiResponse = {
     success: true,
@@ -52,6 +63,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     data: {
       user,
       token,
+      refreshToken,
     },
     timestamp: new Date().toISOString(),
   };
@@ -60,58 +72,19 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
- * Login user with email and password
+ * Login user with email and password (DEPRECATED - Use socialAuth instead)
+ * This endpoint is deprecated in favor of client-side Firebase Auth + ID token verification
  */
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  const { email, password }: LoginRequest = req.body;
-
-  try {
-    // Get user from Firebase
-    const firebaseUser = await getUserByEmail(email);
-    if (!firebaseUser) {
-      throw new AppError('Invalid email or password', 401);
-    }
-
-    if (firebaseUser.disabled) {
-      throw new AppError('Account is disabled', 401);
-    }
-
-    // Note: In a real implementation, you would verify the password here
-    // For now, we'll assume the password is correct if the user exists
-    // You would typically use Firebase Auth's signInWithEmailAndPassword on the client side
-
-    const user = {
-      id: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      name: firebaseUser.displayName || 'User',
-      photo: firebaseUser.photoURL || undefined,
-      type: 'email' as const,
-      createdAt: new Date(firebaseUser.metadata.creationTime),
-      updatedAt: new Date(firebaseUser.metadata.lastSignInTime || firebaseUser.metadata.creationTime),
-      lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
-      isActive: !firebaseUser.disabled,
-    };
-
-    const token = JWTService.generateToken(user);
-
-    const response: ApiResponse = {
-      success: true,
-      message: 'Login successful',
-      data: {
-        user,
-        token,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    res.json(response);
-  } catch (error: any) {
-    // If Firebase Admin is not initialized, provide a helpful error message
-    if (error.message === 'Firebase Auth not initialized') {
-      throw new AppError('Authentication service is not available. Please check server configuration.', 503);
-    }
-    throw error;
-  }
+  // Return deprecation notice
+  const response: ApiResponse = {
+    success: false,
+    message: 'This endpoint is deprecated. Use client-side Firebase Auth and send ID token to /api/auth/social endpoint instead.',
+    error: 'DEPRECATED_ENDPOINT',
+    timestamp: new Date().toISOString(),
+  };
+  
+  res.status(410).json(response); // 410 Gone - Resource no longer available
 });
 
 /**
@@ -187,8 +160,19 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
     };
 
     console.log('🔄 Generating JWT token...');
-    const token = JWTService.generateToken(user);
-    console.log('✅ JWT token generated');
+    const deviceId = req.headers['x-device-id'] as string;
+    const token = JWTService.generateToken(user, deviceId);
+    const refreshToken = await JWTService.generateRefreshToken(user, deviceId);
+    
+    // Create or update session
+    const sessionId = await SessionService.createSession(
+      user.id,
+      deviceId,
+      req.ip || 'unknown',
+      req.get('User-Agent') || 'unknown'
+    );
+    
+    console.log('✅ JWT tokens generated and session created');
 
     const response: ApiResponse = {
       success: true,
@@ -196,6 +180,7 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
       data: {
         user,
         token,
+        refreshToken,
       },
       timestamp: new Date().toISOString(),
     };
@@ -349,7 +334,7 @@ export const verifyToken = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const payload = JWTService.verifyToken(token);
+    const payload = await JWTService.verifyToken(token);
     const firebaseUser = await getUserByUid(payload.uid);
 
     const user = {
@@ -388,4 +373,163 @@ export const verifyToken = asyncHandler(async (req: Request, res: Response) => {
 
     res.status(401).json(response);
   }
+});
+
+/**
+ * Refresh access token using refresh token
+ */
+export const refreshAccessToken = asyncHandler(async (req: Request, res: Response) => {
+  const { refreshToken: clientRefreshToken } = req.body;
+
+  if (!clientRefreshToken) {
+    throw new AppError('Refresh token is required', 401);
+  }
+
+  try {
+    const tokens = await JWTService.refreshAccessToken(clientRefreshToken);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Token refreshed successfully',
+      data: {
+        token: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json(response);
+  } catch (error) {
+    throw new AppError('Invalid or expired refresh token', 401);
+  }
+});
+
+/**
+ * Logout user and revoke tokens
+ */
+export const logoutUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const authHeader = req.headers.authorization;
+  const token = JWTService.extractTokenFromHeader(authHeader);
+  const { refreshToken: clientRefreshToken, logoutAllDevices } = req.body;
+
+  if (token) {
+    // Revoke current access token
+    await JWTService.revokeToken(token);
+  }
+
+  if (req.user) {
+    if (logoutAllDevices) {
+      // Revoke all tokens for user
+      await JWTService.revokeAllUserTokens(req.user.id);
+    } else if (clientRefreshToken) {
+      // Try to extract device ID from refresh token and revoke only that device
+      try {
+        const decoded = JWTService.decodeToken(clientRefreshToken);
+        if (decoded?.deviceId) {
+          await JWTService.revokeDeviceTokens(req.user.id, decoded.deviceId);
+        }
+      } catch (error) {
+        // If we can't decode, just continue with logout
+      }
+    }
+  }
+
+  const response: ApiResponse = {
+    success: true,
+    message: 'Logged out successfully',
+    timestamp: new Date().toISOString(),
+  };
+
+  res.json(response);
+});
+
+/**
+ * Get user sessions
+ */
+export const getUserSessions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const sessions = await SessionService.getUserSessions(req.user.id);
+  
+  // Remove sensitive information
+  const sanitizedSessions = sessions.map(session => ({
+    sessionId: session.sessionId,
+    deviceInfo: session.deviceInfo,
+    ipAddress: session.ipAddress.replace(/\.\d+$/, '.***'), // Mask last octet
+    createdAt: session.createdAt,
+    lastActiveAt: session.lastActiveAt,
+    isActive: session.isActive,
+    isCurrent: session.deviceId === req.headers['x-device-id'],
+  }));
+
+  const response: ApiResponse = {
+    success: true,
+    message: 'Sessions retrieved successfully',
+    data: {
+      sessions: sanitizedSessions,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  res.json(response);
+});
+
+/**
+ * Revoke a specific session
+ */
+export const revokeSession = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const { sessionId } = req.params;
+  
+  if (!sessionId) {
+    throw new AppError('Session ID is required', 400);
+  }
+  const success = await SessionService.revokeSession(sessionId);
+
+  if (!success) {
+    throw new AppError('Session not found', 404);
+  }
+
+  const response: ApiResponse = {
+    success: true,
+    message: 'Session revoked successfully',
+    timestamp: new Date().toISOString(),
+  };
+
+  res.json(response);
+});
+
+/**
+ * Revoke all other sessions (keep current session active)
+ */
+export const revokeOtherSessions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const currentDeviceId = req.headers['x-device-id'] as string;
+  const currentSessions = await SessionService.getUserSessions(req.user.id);
+  const currentSession = currentSessions.find(s => s.deviceId === currentDeviceId);
+  
+  if (!currentSession) {
+    throw new AppError('Current session not found', 400);
+  }
+
+  const revokedCount = await SessionService.revokeOtherSessions(req.user.id, currentSession.sessionId);
+
+  const response: ApiResponse = {
+    success: true,
+    message: `${revokedCount} other sessions revoked successfully`,
+    data: {
+      revokedCount,
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  res.json(response);
 });
