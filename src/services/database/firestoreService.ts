@@ -1,6 +1,6 @@
 import { getFirestore } from '../auth/firebaseAdmin';
 import { CollectionReference, DocumentReference, Query, WriteResult, Transaction } from 'firebase-admin/firestore';
-import { logger } from '../../utils/logger';
+import { Logger } from '../../utils/logger';
 
 export interface FirestoreCollection {
   users: 'users';
@@ -87,10 +87,10 @@ export class FirestoreService {
         updatedAt: new Date(),
       });
       
-      logger.info(`Document created in ${collectionName}/${docId}`);
+      Logger.info(`Document created in ${collectionName}/${docId}`);
       return result;
     } catch (error) {
-      logger.error(`Error creating document in ${collectionName}/${docId}:`, error as Record<string, any>);
+      Logger.error(`Error creating document in ${collectionName}/${docId}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -109,10 +109,10 @@ export class FirestoreService {
         updatedAt: new Date(),
       });
       
-      logger.info(`Document added to ${collectionName} with ID: ${docRef.id}`);
+      Logger.info(`Document added to ${collectionName} with ID: ${docRef.id}`);
       return docRef;
     } catch (error) {
-      logger.error(`Error adding document to ${collectionName}:`, error as Record<string, any>);
+      Logger.error(`Error adding document to ${collectionName}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -134,7 +134,7 @@ export class FirestoreService {
       
       return { id: doc.id, ...doc.data() } as T;
     } catch (error) {
-      logger.error(`Error getting document from ${collectionName}/${docId}:`, error as Record<string, any>);
+      Logger.error(`Error getting document from ${collectionName}/${docId}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -154,10 +154,10 @@ export class FirestoreService {
         updatedAt: new Date(),
       });
       
-      logger.info(`Document updated in ${collectionName}/${docId}`);
+      Logger.info(`Document updated in ${collectionName}/${docId}`);
       return result;
     } catch (error) {
-      logger.error(`Error updating document in ${collectionName}/${docId}:`, error as Record<string, any>);
+      Logger.error(`Error updating document in ${collectionName}/${docId}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -173,10 +173,10 @@ export class FirestoreService {
       const docRef = this.doc(collectionName, docId);
       const result = await docRef.delete();
       
-      logger.info(`Document deleted from ${collectionName}/${docId}`);
+      Logger.info(`Document deleted from ${collectionName}/${docId}`);
       return result;
     } catch (error) {
-      logger.error(`Error deleting document from ${collectionName}/${docId}:`, error as Record<string, any>);
+      Logger.error(`Error deleting document from ${collectionName}/${docId}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -204,7 +204,7 @@ export class FirestoreService {
       
       return results;
     } catch (error) {
-      logger.error(`Error querying collection ${collectionName}:`, error as Record<string, any>);
+      Logger.error(`Error querying collection ${collectionName}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -244,7 +244,7 @@ export class FirestoreService {
       
       return { data, lastDoc, hasMore };
     } catch (error) {
-      logger.error(`Error querying collection ${collectionName} with pagination:`, error as Record<string, any>);
+      Logger.error(`Error querying collection ${collectionName} with pagination:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -285,10 +285,10 @@ export class FirestoreService {
       });
       
       const result = await batch.commit();
-      logger.info(`Batch write completed: ${operations.length} operations`);
+      Logger.info(`Batch write completed: ${operations.length} operations`);
       return result;
     } catch (error) {
-      logger.error('Error in batch write:', error as Record<string, any>);
+      Logger.error('Error in batch write:', error as Record<string, any>);
       throw error;
     }
   }
@@ -302,7 +302,7 @@ export class FirestoreService {
     try {
       return await this.getDB().runTransaction(transactionFn);
     } catch (error) {
-      logger.error('Error in transaction:', error as Record<string, any>);
+      Logger.error('Error in transaction:', error as Record<string, any>);
       throw error;
     }
   }
@@ -319,7 +319,7 @@ export class FirestoreService {
       const doc = await docRef.get();
       return doc.exists;
     } catch (error) {
-      logger.error(`Error checking document existence in ${collectionName}/${docId}:`, error as Record<string, any>);
+      Logger.error(`Error checking document existence in ${collectionName}/${docId}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -332,7 +332,7 @@ export class FirestoreService {
       const snapshot = await this.collection(collectionName).get();
       return snapshot.size;
     } catch (error) {
-      logger.error(`Error counting documents in ${collectionName}:`, error as Record<string, any>);
+      Logger.error(`Error counting documents in ${collectionName}:`, error as Record<string, any>);
       throw error;
     }
   }
@@ -349,7 +349,7 @@ export class FirestoreService {
       return { status: 'healthy', latency };
     } catch (error) {
       const latency = Date.now() - start;
-      logger.error('Firestore health check failed:', error as Record<string, any>);
+      Logger.error('Firestore health check failed:', error as Record<string, any>);
       return { status: 'unhealthy', latency };
     }
   }

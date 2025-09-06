@@ -28,6 +28,7 @@ import {
   handleValidationErrors,
 } from '../middleware/validation/validation';
 import { authenticateJWT } from '../middleware/auth/auth';
+import { requireAuth } from '../middleware/auth/authHelpers';
 
 const router = Router();
 
@@ -78,14 +79,14 @@ router.post('/refresh', refreshAccessToken);
  * @desc    Logout user
  * @access  Private
  */
-router.post('/logout', authenticateJWT, logoutUser);
+router.post('/logout', authenticateJWT, requireAuth, logoutUser);
 
 /**
  * @route   GET /api/auth/profile
  * @desc    Get current user profile
  * @access  Private
  */
-router.get('/profile', authenticateJWT, getProfile);
+router.get('/profile', authenticateJWT, requireAuth, getProfile);
 
 /**
  * @route   POST /api/auth/verify
@@ -99,21 +100,21 @@ router.post('/verify', verifyToken);
  * @desc    Get user sessions
  * @access  Private
  */
-router.get('/sessions', authenticateJWT, getUserSessions);
+router.get('/sessions', authenticateJWT, requireAuth, getUserSessions);
 
 /**
  * @route   DELETE /api/auth/sessions/:sessionId
  * @desc    Revoke a specific session
  * @access  Private
  */
-router.delete('/sessions/:sessionId', authenticateJWT, revokeSession);
+router.delete('/sessions/:sessionId', authenticateJWT, requireAuth, revokeSession);
 
 /**
  * @route   POST /api/auth/sessions/revoke-others
  * @desc    Revoke all other sessions (keep current session active)
  * @access  Private
  */
-router.post('/sessions/revoke-others', authenticateJWT, revokeOtherSessions);
+router.post('/sessions/revoke-others', authenticateJWT, requireAuth, revokeOtherSessions);
 
 /**
  * @route   POST /api/auth/twitter/initiate

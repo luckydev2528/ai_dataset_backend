@@ -1,19 +1,37 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest, ApiResponse, LoginRequest, RegisterRequest, SocialAuthRequest, PasswordResetRequest, PasswordResetConfirmRequest } from '../../types';
 import { JWTService } from '../../services/auth/jwtService';
+import { FirebaseWrapper } from '../../services/firebase/firebaseWrapper';
 import { 
-  createUser, 
-  getUserByEmail, 
   sendPasswordResetEmail, 
   verifyPasswordResetCode, 
-  confirmPasswordReset as confirmPasswordResetService,
-  verifyIdToken,
-  getUserByUid,
-  createCustomToken
+  confirmPasswordReset as confirmPasswordResetService
 } from '../../services/auth/firebaseAdmin';
 import { asyncHandler, AppError } from '../../middleware/error/errorHandler';
-import SessionService from '../../services/session/SessionService';
+import { requireAuth } from '../../middleware/auth/authHelpers';
 import { UserModel } from '../../services/database/models/userModel';
+import { 
+  getDeviceId, 
+  generateUserTokens, 
+  createUserSession,
+  storeOrUpdateUser,
+  determineUserType,
+  createFirebaseUserFallback,
+  addSocialProviderToUser,
+  resolveFirebaseUserWithFallback
+} from '../../utils/authUtils';
+import { createStandardUserObject, createUserDataForDatabase, createJWTUserData } from '../../utils/userUtils';
+import { DatabaseErrorHandler } from '../../utils/errorHandlers';
+import { Logger } from '../../utils/logger';
+import { 
+  createSuccessResponse, 
+  createErrorResponse, 
+  createAuthSuccessResponse,
+  createValidationErrorResponse,
+  createUnauthorizedErrorResponse,
+  createConflictErrorResponse
+} from '../../utils/responseUtils';
+import SessionService from '../../services/session/SessionService';
 
 /**
  * Register new user with email and password
@@ -22,70 +40,40 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name }: RegisterRequest = req.body;
 
   // Check if user already exists
-  const existingUser = await getUserByEmail(email);
+  const existingUser = await FirebaseWrapper.getUserByEmail(email);
   if (existingUser) {
     throw new AppError('User with this email already exists', 409);
   }
 
   // Create user in Firebase
-  const firebaseUser = await createUser({
+  const firebaseUser = await FirebaseWrapper.createUser({
     email,
     password,
     displayName: name,
   });
 
   // Create user in database
-  try {
-    const userData = {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      displayName: firebaseUser.displayName || 'User',
-      type: 'user' as const,
-      isActive: !firebaseUser.disabled
-    };
-    await UserModel.create(userData);
-    console.log('✅ User created in database');
-  } catch (dbError: any) {
-    console.warn('⚠️ Failed to store user in database:', dbError.message);
-    // Continue without database storage - not critical for auth flow
-  }
-
-  // Generate JWT tokens
-  const user = {
-    id: firebaseUser.uid,
-    email: firebaseUser.email || '',
-    name: firebaseUser.displayName || 'User',
-    photo: firebaseUser.photoURL || undefined,
-    type: 'email' as const,
-    createdAt: new Date(firebaseUser.metadata.creationTime),
-    updatedAt: new Date(firebaseUser.metadata.creationTime),
-    isActive: !firebaseUser.disabled,
-  };
-
-  const deviceId = req.headers['x-device-id'] as string;
-  const token = JWTService.generateToken(user, deviceId);
-  const refreshToken = await JWTService.generateRefreshToken(user, deviceId);
-  
-  // Create session
-  const sessionId = await SessionService.createSession(
-    user.id,
-    deviceId,
-    req.ip || 'unknown',
-    req.get('User-Agent') || 'unknown'
+  const userData = createUserDataForDatabase(firebaseUser, 'user');
+  await DatabaseErrorHandler.handleUserOperation(
+    () => UserModel.create(userData),
+    'creation',
+    true // Continue on error
   );
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'User registered successfully',
-    data: {
-      user,
-      token,
-      refreshToken,
-    },
-    timestamp: new Date().toISOString(),
-  };
+  // Generate JWT tokens and create session
+  const user = createStandardUserObject(firebaseUser, 'email', firebaseUser.uid);
+  const deviceId = getDeviceId(req);
+  const { token, refreshToken } = await generateUserTokens(user, deviceId);
+  const sessionId = await createUserSession(firebaseUser.uid, deviceId, req);
 
-  res.status(201).json(response);
+  const { response, statusCode } = createAuthSuccessResponse(
+    'User registered successfully',
+    user,
+    token,
+    refreshToken
+  );
+
+  res.status(statusCode).json(response);
 });
 
 /**
@@ -94,14 +82,13 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
  */
 export const login = asyncHandler(async (req: Request, res: Response) => {
   // Return deprecation notice
-  const response: ApiResponse = {
-    success: false,
-    message: 'This endpoint is deprecated. Use client-side Firebase Auth and send ID token to /api/auth/social endpoint instead.',
-    error: 'DEPRECATED_ENDPOINT',
-    timestamp: new Date().toISOString(),
-  };
+  const { response, statusCode } = createErrorResponse(
+    'This endpoint is deprecated. Use client-side Firebase Auth and send ID token to /api/auth/social endpoint instead.',
+    'DEPRECATED_ENDPOINT',
+    410
+  );
   
-  res.status(410).json(response); // 410 Gone - Resource no longer available
+  res.status(statusCode).json(response);
 });
 
 /**
@@ -110,160 +97,114 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
   const { idToken, provider }: SocialAuthRequest = req.body;
 
-  console.log('🔍 Social Auth Request:', { provider, hasIdToken: !!idToken, idTokenLength: idToken?.length });
+  Logger.info('Social Auth Request', { provider, hasIdToken: !!idToken, idTokenLength: idToken?.length });
 
   try {
     // Verify the ID token
-    console.log('🔄 Verifying ID token...');
-    const decodedToken = await verifyIdToken(idToken);
-    console.log('✅ ID token verified:', { uid: decodedToken.uid, email: decodedToken.email });
+    const decodedToken = await FirebaseWrapper.verifyIdToken(idToken);
     
     let firebaseUser;
     try {
       // Try to get user from Firebase
-      console.log('🔄 Getting user from Firebase...');
-      firebaseUser = await getUserByUid(decodedToken.uid);
-      console.log('✅ Firebase user retrieved:', { uid: firebaseUser.uid, email: firebaseUser.email });
+      firebaseUser = await FirebaseWrapper.getUserByUid(decodedToken.uid);
     } catch (firebaseError: any) {
       // If Firebase Admin fails due to permissions or initialization issues, use token data as fallback
       if (firebaseError.message.includes('Firebase service account lacks required permissions') || 
           firebaseError.message.includes('Firebase Auth not initialized') ||
           firebaseError.message.includes('Failed to parse private key')) {
-        console.warn('⚠️ Firebase Admin error, using token data as fallback:', firebaseError.message);
-        firebaseUser = {
-          uid: decodedToken.uid,
-          email: decodedToken.email || '',
-          displayName: decodedToken.name || 'User',
-          photoURL: decodedToken.picture || undefined,
-          disabled: false,
-          metadata: {
-            creationTime: decodedToken.iat ? new Date(decodedToken.iat * 1000).toISOString() : new Date().toISOString(),
-            lastSignInTime: decodedToken.auth_time ? new Date(decodedToken.auth_time * 1000).toISOString() : new Date().toISOString(),
-          }
-        };
+        Logger.firebaseWarning('Firebase Admin error, using token data as fallback', { error: firebaseError.message });
+        firebaseUser = createFirebaseUserFallback(decodedToken);
       } else {
         throw firebaseError;
       }
     }
 
     // Determine user type from provider
-    let userType: 'email' | 'google' | 'twitter' | 'facebook' = 'email';
-    switch (provider) {
-      case 'email':
-        userType = 'email';
-        break;
-      case 'google':
-        userType = 'google';
-        break;
-      case 'twitter':
-        userType = 'twitter';
-        break;
-      case 'facebook':
-        userType = 'facebook';
-        break;
-    }
-
-    console.log('🔄 Creating user object...');
-    const user = {
-      id: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      name: firebaseUser.displayName || 'User',
-      photo: firebaseUser.photoURL || undefined,
-      type: userType,
-      createdAt: new Date(firebaseUser.metadata.creationTime),
-      updatedAt: new Date(firebaseUser.metadata.lastSignInTime || firebaseUser.metadata.creationTime),
-      lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
-      isActive: !firebaseUser.disabled,
-    };
+    const userType = determineUserType(provider);
 
     // Store/update user in database
-    try {
-      const existingUser = await UserModel.getByUid(firebaseUser.uid);
-      if (existingUser) {
-        // Update existing user
-        await UserModel.update(existingUser.id, { 
+    const existingUser = await DatabaseErrorHandler.handleUserOperation(
+      () => UserModel.getByUid(firebaseUser.uid),
+      'retrieval',
+      true
+    );
+
+    let databaseUserId: string;
+    let user: any;
+
+    if (existingUser) {
+      // Update existing user
+      await DatabaseErrorHandler.handleUserOperation(
+        () => UserModel.update(existingUser.id, { 
           lastLoginAt: new Date(),
           updatedAt: new Date()
-        });
-        console.log('✅ User updated in database');
-        
-        // Add social provider if it doesn't exist
-        try {
-          await UserModel.addSocialProvider(firebaseUser.uid, {
-            provider: provider as 'google' | 'facebook' | 'twitter' | 'apple',
-            providerId: firebaseUser.uid,
-            ...(firebaseUser.email && { email: firebaseUser.email }),
-            ...(firebaseUser.displayName && { displayName: firebaseUser.displayName }),
-            ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL })
-          });
-          console.log('✅ Social provider added/updated for existing user');
-        } catch (providerError: any) {
-          console.warn('⚠️ Failed to add social provider:', providerError.message);
-        }
-        
-        // Update user data for JWT with existing user info
-        user.id = existingUser.id;
-        user.email = existingUser.email;
-        user.name = existingUser.displayName || firebaseUser.displayName || 'User';
-      } else {
-        // Create new user in database
-        const userData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          displayName: firebaseUser.displayName || 'User',
-          ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL }),
-          type: 'user' as const,
-          isActive: !firebaseUser.disabled
-        };
-        await UserModel.create(userData);
-        console.log('✅ User created in database');
-        
-        // Add social provider
-        await UserModel.addSocialProvider(firebaseUser.uid, {
-          provider: provider as 'google' | 'facebook' | 'twitter' | 'apple',
-          providerId: firebaseUser.uid,
-          ...(firebaseUser.email && { email: firebaseUser.email }),
-          ...(firebaseUser.displayName && { displayName: firebaseUser.displayName }),
-          ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL })
-        });
-        console.log('✅ Social provider added to user');
-      }
-    } catch (dbError: any) {
-      console.warn('⚠️ Failed to store user in database:', dbError.message);
-      // Continue without database storage - not critical for auth flow
+        }),
+        'update',
+        true
+      );
+      
+      // Add social provider if it doesn't exist
+      await DatabaseErrorHandler.handleUserOperation(
+        () => addSocialProviderToUser(firebaseUser.uid, provider, firebaseUser),
+        'social provider addition',
+        true
+      );
+      
+    // Use Firebase UID for JWT token consistency (not database ID)
+    user = createStandardUserObject(firebaseUser, userType, firebaseUser.uid);
+    
+    // Update user data with existing user info
+    user.email = existingUser.email;
+    user.name = existingUser.displayName || firebaseUser.displayName || 'User';
+    
+    Logger.info('AUTH: Using Firebase UID for JWT token', { 
+      firebaseUid: firebaseUser.uid, 
+      databaseId: existingUser.id,
+      userType 
+    });
+    } else {
+      // Create new user in database
+      const userData = createUserDataForDatabase(firebaseUser, 'user');
+      const newUser = await DatabaseErrorHandler.handleUserOperation(
+        () => UserModel.create(userData),
+        'creation',
+        true
+      );
+      
+      // Add social provider
+      await DatabaseErrorHandler.handleUserOperation(
+        () => addSocialProviderToUser(firebaseUser.uid, provider, firebaseUser),
+        'social provider addition',
+        true
+      );
+      
+      // Use Firebase UID for JWT token consistency (not database ID)
+      user = createStandardUserObject(firebaseUser, userType, firebaseUser.uid);
+      
+      Logger.info('AUTH: Using Firebase UID for JWT token (new user)', { 
+        firebaseUid: firebaseUser.uid, 
+        databaseId: newUser?.id,
+        userType 
+      });
     }
 
-    console.log('🔄 Generating JWT token...');
-    const deviceId = req.headers['x-device-id'] as string;
-    const token = JWTService.generateToken(user, deviceId);
-    const refreshToken = await JWTService.generateRefreshToken(user, deviceId);
+    const deviceId = getDeviceId(req);
+    const { token, refreshToken } = await generateUserTokens(user, deviceId);
     
-    // Create or update session
-    const sessionId = await SessionService.createSession(
-      user.id,
-      deviceId,
-      req.ip || 'unknown',
-      req.get('User-Agent') || 'unknown'
+    // Use Firebase UID for session management to match JWT tokens
+    const sessionId = await createUserSession(firebaseUser.uid, deviceId, req);
+
+    const { response, statusCode } = createAuthSuccessResponse(
+      `${provider} authentication successful`,
+      user,
+      token,
+      refreshToken
     );
-    
-    console.log('✅ JWT tokens generated and session created');
 
-    const response: ApiResponse = {
-      success: true,
-      message: `${provider} authentication successful`,
-      data: {
-        user,
-        token,
-        refreshToken,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    console.log('✅ Social auth successful, sending response');
-    res.json(response);
+    Logger.authSuccess('Social auth successful, sending response');
+    res.status(statusCode).json(response);
   } catch (error: any) {
-    console.error('❌ Social auth error:', error);
-    console.error('Error details:', {
+    Logger.authError('Social auth error', {
       message: error.message,
       stack: error.stack,
       name: error.name
@@ -295,28 +236,21 @@ export const sendPasswordReset = asyncHandler(async (req: Request, res: Response
   const { email }: PasswordResetRequest = req.body;
 
   // Check if user exists
-  const user = await getUserByEmail(email);
+  const user = await FirebaseWrapper.getUserByEmail(email);
   if (!user) {
     // Don't reveal if user exists or not for security
-    const response: ApiResponse = {
-      success: true,
-      message: 'If an account with this email exists, a password reset link has been sent',
-      timestamp: new Date().toISOString(),
-    };
-    res.json(response);
+    const { response, statusCode } = createSuccessResponse(
+      'If an account with this email exists, a password reset link has been sent'
+    );
+    res.status(statusCode).json(response);
     return;
   }
 
   // Send password reset email
   await sendPasswordResetEmail(email);
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Password reset email sent',
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse('Password reset email sent');
+  res.status(statusCode).json(response);
 });
 
 /**
@@ -328,35 +262,23 @@ export const confirmPasswordReset = asyncHandler(async (req: Request, res: Respo
   // Verify the reset code and confirm password reset
   await confirmPasswordResetService(oobCode, newPassword);
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Password reset successful',
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse('Password reset successful');
+  res.status(statusCode).json(response);
 });
 
 /**
  * Refresh JWT token
  */
 export const refreshToken = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
-  const newToken = JWTService.generateToken(req.user);
+  const newToken = JWTService.generateToken(req.user!);
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Token refreshed successfully',
-    data: {
-      token: newToken,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'Token refreshed successfully',
+    { token: newToken }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
@@ -367,33 +289,21 @@ export const logout = asyncHandler(async (req: AuthenticatedRequest, res: Respon
   // by removing the token from storage. For server-side logout,
   // you would need to maintain a token blacklist.
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Logout successful',
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse('Logout successful');
+  res.status(statusCode).json(response);
 });
 
 /**
  * Get current user profile
  */
 export const getProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Profile retrieved successfully',
-    data: {
-      user: req.user,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'Profile retrieved successfully',
+    { user: req.user }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
@@ -409,43 +319,26 @@ export const verifyToken = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     const payload = await JWTService.verifyToken(token);
-    const firebaseUser = await getUserByUid(payload.uid);
+    
+    // Use centralized helper to resolve Firebase user with database fallback
+    const { firebaseUser, databaseUserId } = await resolveFirebaseUserWithFallback(
+      payload.uid, 
+      'token verification'
+    );
 
-    const user = {
-      id: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      name: firebaseUser.displayName || 'User',
-      photo: firebaseUser.photoURL || undefined,
-      type: payload.type,
-      createdAt: new Date(firebaseUser.metadata.creationTime),
-      updatedAt: new Date(firebaseUser.metadata.lastSignInTime || firebaseUser.metadata.creationTime),
-      lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
-      isActive: !firebaseUser.disabled,
-    };
+    const user = createStandardUserObject(firebaseUser, payload.type, firebaseUser.uid);
 
-    const response: ApiResponse = {
-      success: true,
-      message: 'Token is valid',
-      data: {
-        user,
-        valid: true,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    res.json(response);
+    const { response, statusCode } = createSuccessResponse(
+      'Token is valid',
+      { user, valid: true }
+    );
+    res.status(statusCode).json(response);
   } catch (error) {
-    const response: ApiResponse = {
-      success: false,
-      message: 'Token is invalid',
-      data: {
-        valid: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    res.status(401).json(response);
+    const { response, statusCode } = createUnauthorizedErrorResponse(
+      'Token is invalid',
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+    res.status(statusCode).json(response);
   }
 });
 
@@ -462,17 +355,14 @@ export const refreshAccessToken = asyncHandler(async (req: Request, res: Respons
   try {
     const tokens = await JWTService.refreshAccessToken(clientRefreshToken);
 
-    const response: ApiResponse = {
-      success: true,
-      message: 'Token refreshed successfully',
-      data: {
+    const { response, statusCode } = createSuccessResponse(
+      'Token refreshed successfully',
+      {
         token: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    res.json(response);
+      }
+    );
+    res.status(statusCode).json(response);
   } catch (error) {
     throw new AppError('Invalid or expired refresh token', 401);
   }
@@ -508,24 +398,17 @@ export const logoutUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
     }
   }
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Logged out successfully',
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse('Logged out successfully');
+  res.status(statusCode).json(response);
 });
 
 /**
  * Get user sessions
  */
 export const getUserSessions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401);
-  }
+  requireAuth(req, res, () => {});
 
-  const sessions = await SessionService.getUserSessions(req.user.id);
+  const sessions = await SessionService.getUserSessions(req.user!.id);
   
   // Remove sensitive information
   const sanitizedSessions = sessions.map(session => ({
@@ -538,25 +421,18 @@ export const getUserSessions = asyncHandler(async (req: AuthenticatedRequest, re
     isCurrent: session.deviceId === req.headers['x-device-id'],
   }));
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Sessions retrieved successfully',
-    data: {
-      sessions: sanitizedSessions,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'Sessions retrieved successfully',
+    { sessions: sanitizedSessions }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
  * Revoke a specific session
  */
 export const revokeSession = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401);
-  }
+  requireAuth(req, res, () => {});
 
   const { sessionId } = req.params;
   
@@ -569,41 +445,29 @@ export const revokeSession = asyncHandler(async (req: AuthenticatedRequest, res:
     throw new AppError('Session not found', 404);
   }
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Session revoked successfully',
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse('Session revoked successfully');
+  res.status(statusCode).json(response);
 });
 
 /**
  * Revoke all other sessions (keep current session active)
  */
 export const revokeOtherSessions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401);
-  }
+  requireAuth(req, res, () => {});
 
   const currentDeviceId = req.headers['x-device-id'] as string;
-  const currentSessions = await SessionService.getUserSessions(req.user.id);
+  const currentSessions = await SessionService.getUserSessions(req.user!.id);
   const currentSession = currentSessions.find(s => s.deviceId === currentDeviceId);
   
   if (!currentSession) {
     throw new AppError('Current session not found', 400);
   }
 
-  const revokedCount = await SessionService.revokeOtherSessions(req.user.id, currentSession.sessionId);
+  const revokedCount = await SessionService.revokeOtherSessions(req.user!.id, currentSession.sessionId);
 
-  const response: ApiResponse = {
-    success: true,
-    message: `${revokedCount} other sessions revoked successfully`,
-    data: {
-      revokedCount,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    `${revokedCount} other sessions revoked successfully`,
+    { revokedCount }
+  );
+  res.status(statusCode).json(response);
 });

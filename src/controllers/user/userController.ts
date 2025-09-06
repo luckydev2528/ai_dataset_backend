@@ -1,35 +1,35 @@
 import { Response } from 'express';
 import { AuthenticatedRequest, ApiResponse, UpdateUserData } from '../../types';
-import { updateUser, deleteUser, getUserByUid } from '../../services/auth/firebaseAdmin';
+import { FirebaseWrapper } from '../../services/firebase/firebaseWrapper';
 import { asyncHandler, AppError } from '../../middleware/error/errorHandler';
+import { requireAuth } from '../../middleware/auth/authHelpers';
+import { createStandardUserObject } from '../../utils/userUtils';
+import { Logger } from '../../utils/logger';
+import { 
+  createSuccessResponse, 
+  createErrorResponse,
+  createNotFoundErrorResponse,
+  createValidationErrorResponse
+} from '../../utils/responseUtils';
 
 /**
  * Get current user profile
  */
 export const getProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Profile retrieved successfully',
-    data: {
-      user: req.user,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'Profile retrieved successfully',
+    { user: req.user }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
  * Update user profile
  */
 export const updateProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   const { name, photo }: UpdateUserData = req.body;
 
@@ -39,140 +39,97 @@ export const updateProfile = asyncHandler(async (req: AuthenticatedRequest, res:
   if (photo !== undefined) updateData.photoURL = photo;
 
   // Update user in Firebase
-  const updatedFirebaseUser = await updateUser(req.user.id, updateData);
+  const updatedFirebaseUser = await FirebaseWrapper.updateUser(req.user!.id, updateData);
 
   // Update local user object
   const updatedUser = {
     ...req.user,
-    name: updatedFirebaseUser.displayName || req.user.name,
-    photo: updatedFirebaseUser.photoURL || req.user.photo,
+    name: updatedFirebaseUser.displayName || req.user!.name,
+    photo: updatedFirebaseUser.photoURL || req.user!.photo,
     updatedAt: new Date(),
   };
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Profile updated successfully',
-    data: {
-      user: updatedUser,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'Profile updated successfully',
+    { user: updatedUser }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
  * Delete user account
  */
 export const deleteAccount = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   // Delete user from Firebase
-  await deleteUser(req.user.id);
+  await FirebaseWrapper.deleteUser(req.user!.id);
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'Account deleted successfully',
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse('Account deleted successfully');
+  res.status(statusCode).json(response);
 });
 
 /**
  * Get user by ID (admin only)
  */
 export const getUserById = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   const { userId } = req.params;
 
   // Get user from Firebase
-  const firebaseUser = await getUserByUid(userId!);
+  const firebaseUser = await FirebaseWrapper.getUserByUid(userId!);
 
-  const user = {
-    id: firebaseUser.uid,
-    email: firebaseUser.email || '',
-    name: firebaseUser.displayName || 'User',
-    photo: firebaseUser.photoURL || undefined,
-    type: 'email' as const, // This would need to be determined from provider data
-    createdAt: new Date(firebaseUser.metadata.creationTime),
-    updatedAt: new Date(firebaseUser.metadata.lastSignInTime || firebaseUser.metadata.creationTime),
-    lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
-    isActive: !firebaseUser.disabled,
-  };
+  const user = createStandardUserObject(firebaseUser, 'email');
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'User retrieved successfully',
-    data: {
-      user,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'User retrieved successfully',
+    { user }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
  * Get all users (admin only)
  */
 export const getAllUsers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   // This would require implementing a user listing function in Firebase Admin
   // For now, we'll return a placeholder response
-  const response: ApiResponse = {
-    success: true,
-    message: 'Users retrieved successfully',
-    data: {
+  const { response, statusCode } = createSuccessResponse(
+    'Users retrieved successfully',
+    {
       users: [],
       total: 0,
       page: 1,
       limit: 10,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+    }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
  * Update user status (admin only)
  */
 export const updateUserStatus = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   const { userId } = req.params;
   const { isActive } = req.body;
 
   // Update user status in Firebase
-  await updateUser(userId!, { disabled: !isActive });
+  await FirebaseWrapper.updateUser(userId!, { disabled: !isActive });
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'User status updated successfully',
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse('User status updated successfully');
+  res.status(statusCode).json(response);
 });
 
 /**
  * Get user statistics
  */
 export const getUserStats = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   // This would typically involve querying a database for user statistics
   // For now, we'll return a placeholder response
@@ -184,25 +141,18 @@ export const getUserStats = asyncHandler(async (req: AuthenticatedRequest, res: 
     newUsersThisMonth: 0,
   };
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'User statistics retrieved successfully',
-    data: {
-      stats,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'User statistics retrieved successfully',
+    { stats }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
  * Search users
  */
 export const searchUsers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   const { query, page = 1, limit = 10 } = req.query;
 
@@ -212,29 +162,24 @@ export const searchUsers = asyncHandler(async (req: AuthenticatedRequest, res: R
 
   // This would typically involve querying a database for users
   // For now, we'll return a placeholder response
-  const response: ApiResponse = {
-    success: true,
-    message: 'Users search completed',
-    data: {
+  const { response, statusCode } = createSuccessResponse(
+    'Users search completed',
+    {
       users: [],
       total: 0,
       page: parseInt(page as string),
       limit: parseInt(limit as string),
       query,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+    }
+  );
+  res.status(statusCode).json(response);
 });
 
 /**
  * Export user data (GDPR compliance)
  */
 export const exportUserData = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    throw new AppError('User not authenticated', 401);
-  }
+  requireAuth(req, res, () => {});
 
   // This would typically involve gathering all user data from various sources
   // For now, we'll return the basic user profile
@@ -244,12 +189,9 @@ export const exportUserData = asyncHandler(async (req: AuthenticatedRequest, res
     dataTypes: ['profile', 'authentication', 'preferences'],
   };
 
-  const response: ApiResponse = {
-    success: true,
-    message: 'User data exported successfully',
-    data: userData,
-    timestamp: new Date().toISOString(),
-  };
-
-  res.json(response);
+  const { response, statusCode } = createSuccessResponse(
+    'User data exported successfully',
+    userData
+  );
+  res.status(statusCode).json(response);
 });

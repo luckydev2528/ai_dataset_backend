@@ -1,7 +1,11 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest, ApiResponse } from '../../types';
 import { JWTService } from '../../services/auth/jwtService';
-import { verifyIdToken, getUserByUid } from '../../services/auth/firebaseAdmin';
+import { FirebaseWrapper } from '../../services/firebase/firebaseWrapper';
+import { createStandardUserObject } from '../../utils/userUtils';
+import { Logger } from '../../utils/logger';
+import { requireAuth } from './authHelpers';
+import { determineUserType, extractTokenFromRequest, resolveFirebaseUserWithFallback } from '../../utils/authUtils';
 
 /**
  * JWT Authentication Middleware
@@ -13,8 +17,7 @@ export const authenticateJWT = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = JWTService.extractTokenFromHeader(authHeader);
+    const token = extractTokenFromRequest(req);
 
     if (!token) {
       const response: ApiResponse = {
@@ -29,21 +32,14 @@ export const authenticateJWT = async (
     // Verify JWT token
     const payload = await JWTService.verifyToken(token);
 
-    // Get user from Firebase
-    const firebaseUser = await getUserByUid(payload.uid);
+    // Use centralized helper to resolve Firebase user with database fallback
+    const { firebaseUser, databaseUserId } = await resolveFirebaseUserWithFallback(
+      payload.uid, 
+      'JWT authentication'
+    );
 
-    // Create user object
-    const user = {
-      id: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      name: firebaseUser.displayName || 'User',
-      photo: firebaseUser.photoURL || undefined,
-      type: payload.type,
-      createdAt: new Date(firebaseUser.metadata.creationTime),
-      updatedAt: new Date(firebaseUser.metadata.lastSignInTime || firebaseUser.metadata.creationTime),
-      lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
-      isActive: !firebaseUser.disabled,
-    };
+    // Create user object using Firebase UID for JWT consistency
+    const user = createStandardUserObject(firebaseUser, payload.type, firebaseUser.uid);
 
     // Add user to request
     req.user = user;
@@ -51,7 +47,7 @@ export const authenticateJWT = async (
 
     next();
   } catch (error) {
-    console.error('JWT Authentication error:', error);
+    Logger.authError('JWT Authentication error', { error: error instanceof Error ? error.message : 'Unknown error' });
     
     const response: ApiResponse = {
       success: false,
@@ -74,8 +70,7 @@ export const authenticateFirebase = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = JWTService.extractTokenFromHeader(authHeader);
+    const token = extractTokenFromRequest(req);
 
     if (!token) {
       const response: ApiResponse = {
@@ -88,43 +83,17 @@ export const authenticateFirebase = async (
     }
 
     // Verify Firebase ID token
-    const decodedToken = await verifyIdToken(token);
+    const decodedToken = await FirebaseWrapper.verifyIdToken(token);
 
     // Get user from Firebase
-    const firebaseUser = await getUserByUid(decodedToken.uid);
+    const firebaseUser = await FirebaseWrapper.getUserByUid(decodedToken.uid);
 
     // Determine user type from provider data
     const providerData = firebaseUser.providerData[0];
-    let userType: 'email' | 'google' | 'twitter' | 'facebook' = 'email';
-    
-    if (providerData) {
-      switch (providerData.providerId) {
-        case 'google.com':
-          userType = 'google';
-          break;
-        case 'twitter.com':
-          userType = 'twitter';
-          break;
-        case 'facebook.com':
-          userType = 'facebook';
-          break;
-        default:
-          userType = 'email';
-      }
-    }
+    const userType = providerData ? determineUserType(providerData.providerId.replace('.com', '')) : 'email';
 
-    // Create user object
-    const user = {
-      id: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      name: firebaseUser.displayName || 'User',
-      photo: firebaseUser.photoURL || undefined,
-      type: userType,
-      createdAt: new Date(firebaseUser.metadata.creationTime),
-      updatedAt: new Date(firebaseUser.metadata.lastSignInTime || firebaseUser.metadata.creationTime),
-      lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
-      isActive: !firebaseUser.disabled,
-    };
+    // Create user object using standardized function
+    const user = createStandardUserObject(firebaseUser, userType);
 
     // Add user to request
     req.user = user;
@@ -132,7 +101,7 @@ export const authenticateFirebase = async (
 
     next();
   } catch (error) {
-    console.error('Firebase Authentication error:', error);
+    Logger.authError('Firebase Authentication error', { error: error instanceof Error ? error.message : 'Unknown error' });
     
     const response: ApiResponse = {
       success: false,
@@ -141,7 +110,7 @@ export const authenticateFirebase = async (
     };
     
     res.status(401).json(response);
-      return;
+    return;
   }
 };
 
@@ -155,8 +124,7 @@ export const optionalAuth = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = JWTService.extractTokenFromHeader(authHeader);
+    const token = extractTokenFromRequest(req);
 
     if (!token) {
       next();
@@ -166,64 +134,30 @@ export const optionalAuth = async (
     // Try to verify token
     try {
       const payload = await JWTService.verifyToken(token);
-      const firebaseUser = await getUserByUid(payload.uid);
+      
+      // Use centralized helper to resolve Firebase user with database fallback
+      const { firebaseUser, databaseUserId } = await resolveFirebaseUserWithFallback(
+        payload.uid, 
+        'optional authentication'
+      );
 
-      const user = {
-        id: firebaseUser.uid,
-        email: firebaseUser.email || '',
-        name: firebaseUser.displayName || 'User',
-        photo: firebaseUser.photoURL || undefined,
-        type: payload.type,
-        createdAt: new Date(firebaseUser.metadata.creationTime),
-        updatedAt: new Date(firebaseUser.metadata.lastSignInTime || firebaseUser.metadata.creationTime),
-        lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
-        isActive: !firebaseUser.disabled,
-      };
+      const user = createStandardUserObject(firebaseUser, payload.type, firebaseUser.uid);
 
       req.user = user;
       req.firebaseUser = firebaseUser;
     } catch (error) {
       // Token is invalid, but we don't fail the request
-      console.warn('Optional auth failed:', error);
+      Logger.warning('Optional auth failed', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
 
     next();
   } catch (error) {
-    console.error('Optional auth error:', error);
+    Logger.error('Optional auth error', { error: error instanceof Error ? error.message : 'Unknown error' });
     next(); // Continue even if there's an error
   }
 };
 
-/**
- * Role-based Authorization Middleware
- */
-export const requireRole = (roles: string[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      const response: ApiResponse = {
-        success: false,
-        message: 'Authentication required',
-        timestamp: new Date().toISOString(),
-      };
-      res.status(401).json(response);
-      return;
-    }
-
-    // Check if user has required role (this would need to be implemented based on your role system)
-    // For now, we'll just check if user is active
-    if (!req.user.isActive) {
-      const response: ApiResponse = {
-        success: false,
-        message: 'Account is disabled',
-        timestamp: new Date().toISOString(),
-      };
-      res.status(403).json(response);
-      return;
-    }
-
-    next();
-  };
-};
+// Note: requireRole is now imported from authHelpers.ts to avoid duplication
 
 /**
  * Rate limiting per user

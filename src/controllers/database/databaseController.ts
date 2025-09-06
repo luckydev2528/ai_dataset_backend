@@ -4,7 +4,7 @@ import { DeviceModel } from '../../services/database/models/deviceModel';
 import { AnalyticsModel } from '../../services/database/models/analyticsModel';
 import { firestoreService } from '../../services/database/firestoreService';
 import { ApiResponse } from '../../types';
-import { logger } from '../../utils/logger';
+import { Logger } from '../../utils/logger';
 
 export class DatabaseController {
   /**
@@ -26,7 +26,7 @@ export class DatabaseController {
       
       res.status(200).json(response);
     } catch (error) {
-      logger.error('Database health check failed:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Database health check failed:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,
@@ -55,7 +55,7 @@ export class DatabaseController {
       
       res.status(200).json(response);
     } catch (error) {
-      logger.error('Error getting user statistics:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error getting user statistics:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,
@@ -84,7 +84,7 @@ export class DatabaseController {
       
       res.status(200).json(response);
     } catch (error) {
-      logger.error('Error getting device statistics:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error getting device statistics:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,
@@ -130,7 +130,7 @@ export class DatabaseController {
       
       res.status(200).json(response);
     } catch (error) {
-      logger.error('Error getting analytics dashboard data:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error getting analytics dashboard data:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,
@@ -174,7 +174,7 @@ export class DatabaseController {
       
       res.status(200).json(response);
     } catch (error) {
-      logger.error('Error getting real-time metrics:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error getting real-time metrics:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,
@@ -240,7 +240,7 @@ export class DatabaseController {
       
       res.status(201).json(response);
     } catch (error) {
-      logger.error('Error tracking event:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error tracking event:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,
@@ -298,7 +298,7 @@ export class DatabaseController {
       
       res.status(200).json(response);
     } catch (error) {
-      logger.error('Error getting user activity timeline:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error getting user activity timeline:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,
@@ -361,7 +361,7 @@ export class DatabaseController {
       
       res.status(200).json(response);
     } catch (error) {
-      logger.error('Error cleaning up old data:', { error: error instanceof Error ? error.message : String(error) });
+      Logger.error('Error cleaning up old data:', { error: error instanceof Error ? error.message : String(error) });
       
       const response: ApiResponse = {
         success: false,

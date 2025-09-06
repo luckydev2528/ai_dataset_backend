@@ -1,5 +1,6 @@
 import { JWTService } from '../auth/jwtService';
 import { redisService } from '../cache/RedisService';
+import { UserModel } from '../database/models/userModel';
 
 export interface SessionInfo {
   sessionId: string;
@@ -89,6 +90,7 @@ export class SessionService {
       
       // Also revoke associated tokens
       if (session.deviceId) {
+        // session.userId is now Firebase UID, which matches JWT tokens
         await JWTService.revokeDeviceTokens(session.userId, session.deviceId);
       }
       
@@ -111,7 +113,7 @@ export class SessionService {
       }
     }
     
-    // Also revoke all JWT tokens for the user
+    // Also revoke all JWT tokens for the user (userId is now Firebase UID)
     await JWTService.revokeAllUserTokens(userId);
     
     return revokedCount;
@@ -129,7 +131,7 @@ export class SessionService {
         await redisService.updateSession(session.sessionId, { isActive: false });
         revokedCount++;
         
-        // Revoke tokens for this device
+        // Revoke tokens for this device (userId is now Firebase UID)
         if (session.deviceId) {
           await JWTService.revokeDeviceTokens(userId, session.deviceId);
         }
