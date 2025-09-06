@@ -105,6 +105,10 @@ export interface CustomClaims {
   role?: string;
   permissions?: string[];
   provider?: string;
+  screen_name?: string;
+  twitter_id?: string;
+  email?: string;
+  [key: string]: any; // Allow additional custom claims
 }
 
 // Validation Error

@@ -14,6 +14,12 @@ import {
   revokeOtherSessions,
 } from '../controllers/auth/authController';
 import {
+  initiateTwitterAuth,
+  handleTwitterCallback,
+  getTwitterResult,
+  processTwitterAuth,
+} from '../controllers/auth/twitterController';
+import {
   validateRegistration,
   validateLogin,
   validateSocialAuth,
@@ -108,5 +114,33 @@ router.delete('/sessions/:sessionId', authenticateJWT, revokeSession);
  * @access  Private
  */
 router.post('/sessions/revoke-others', authenticateJWT, revokeOtherSessions);
+
+/**
+ * @route   POST /api/auth/twitter/initiate
+ * @desc    Initiate Twitter OAuth flow
+ * @access  Public
+ */
+router.post('/twitter/initiate', initiateTwitterAuth);
+
+/**
+ * @route   POST /api/auth/twitter/process
+ * @desc    Process Twitter OAuth tokens and complete authentication
+ * @access  Public
+ */
+router.post('/twitter/process', processTwitterAuth);
+
+/**
+ * @route   GET /api/auth/twitter/callback
+ * @desc    Handle Twitter OAuth callback
+ * @access  Public
+ */
+router.get('/twitter/callback', handleTwitterCallback);
+
+/**
+ * @route   GET /api/auth/twitter/result/:sessionId
+ * @desc    Get Twitter OAuth result and complete authentication
+ * @access  Public
+ */
+router.get('/twitter/result/:sessionId', getTwitterResult);
 
 export default router;
