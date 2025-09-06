@@ -53,6 +53,8 @@ export interface JWTPayload {
     type: 'email' | 'google' | 'twitter' | 'facebook';
     iat: number;
     exp: number;
+    jti?: string;
+    deviceId?: string;
 }
 export interface AuthenticatedRequest extends Request {
     user?: User;
@@ -80,6 +82,10 @@ export interface CustomClaims {
     role?: string;
     permissions?: string[];
     provider?: string;
+    screen_name?: string;
+    twitter_id?: string;
+    email?: string;
+    [key: string]: any;
 }
 export interface ValidationError {
     field: string;

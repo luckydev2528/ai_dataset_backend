@@ -20,7 +20,8 @@ export class FirestoreService {
   private db: FirebaseFirestore.Firestore | null = null;
 
   private constructor() {
-    this.db = getFirestore();
+    // Don't initialize db here - wait for explicit initialization
+    this.db = null;
   }
 
   public static getInstance(): FirestoreService {
@@ -31,9 +32,25 @@ export class FirestoreService {
   }
 
   /**
+   * Initialize Firestore database instance
+   */
+  public initialize(): void {
+    if (!this.db) {
+      this.db = getFirestore();
+      if (!this.db) {
+        throw new Error('Firestore not initialized. Please check your Firebase configuration.');
+      }
+    }
+  }
+
+  /**
    * Get Firestore database instance
    */
   public getDB(): FirebaseFirestore.Firestore {
+    if (!this.db) {
+      // Try to initialize if not already done
+      this.initialize();
+    }
     if (!this.db) {
       throw new Error('Firestore not initialized. Please check your Firebase configuration.');
     }

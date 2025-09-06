@@ -67,12 +67,20 @@ async function initializeServices() {
     const firebaseApp = initializeFirebaseAdmin();
     if (!firebaseApp) {
       console.warn('⚠️ Firebase Admin not initialized - some features may not work');
+    } else {
+      // Initialize Firestore Service after Firebase Admin is ready
+      try {
+        firestoreService.initialize();
+        console.log('✅ Firestore Service initialized successfully');
+      } catch (error) {
+        console.warn('⚠️ Firestore Service initialization failed:', error);
+      }
     }
     
     // Initialize Redis
     await redisService.connect();
     
-    // Initialize Firestore
+    // Test Firestore connection
     try {
       await firestoreService.healthCheck();
       console.log('✅ Firestore connected successfully');
