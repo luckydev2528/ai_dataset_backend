@@ -58,7 +58,7 @@ function validateEnvironment() {
 validateEnvironment();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // Initialize services
 async function initializeServices() {
@@ -131,7 +131,12 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000', 'http://localhost:8081'],
+  origin: process.env.CORS_ORIGIN?.split(',') || [
+    'http://localhost:3000', 
+    'http://localhost:8081',
+    'http://192.168.1.19:3000',
+    'http://192.168.1.19:8081'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -238,10 +243,11 @@ async function startServer() {
     await initializeServices();
     
     // Start the HTTP server
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 Environment: ${process.env.NODE_ENV}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+      console.log(`🔗 Mobile access: http://192.168.1.19:${PORT}/health`);
       console.log(`📋 API Documentation: http://localhost:${PORT}/`);
       console.log(`🔴 Redis: ${redisService.isReady() ? 'Connected' : 'Disconnected'}`);
     });
