@@ -13,6 +13,7 @@ import {
 } from '../../services/auth/firebaseAdmin';
 import { asyncHandler, AppError } from '../../middleware/error/errorHandler';
 import SessionService from '../../services/session/SessionService';
+import { UserModel } from '../../services/database/models/userModel';
 
 /**
  * Register new user with email and password
@@ -32,6 +33,22 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     password,
     displayName: name,
   });
+
+  // Create user in database
+  try {
+    const userData = {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email || '',
+      displayName: firebaseUser.displayName || 'User',
+      type: 'user' as const,
+      isActive: !firebaseUser.disabled
+    };
+    await UserModel.create(userData);
+    console.log('✅ User created in database');
+  } catch (dbError: any) {
+    console.warn('⚠️ Failed to store user in database:', dbError.message);
+    // Continue without database storage - not critical for auth flow
+  }
 
   // Generate JWT tokens
   const user = {
@@ -158,6 +175,63 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
       lastLoginAt: firebaseUser.metadata.lastSignInTime ? new Date(firebaseUser.metadata.lastSignInTime) : undefined,
       isActive: !firebaseUser.disabled,
     };
+
+    // Store/update user in database
+    try {
+      const existingUser = await UserModel.getByUid(firebaseUser.uid);
+      if (existingUser) {
+        // Update existing user
+        await UserModel.update(existingUser.id, { 
+          lastLoginAt: new Date(),
+          updatedAt: new Date()
+        });
+        console.log('✅ User updated in database');
+        
+        // Add social provider if it doesn't exist
+        try {
+          await UserModel.addSocialProvider(firebaseUser.uid, {
+            provider: provider as 'google' | 'facebook' | 'twitter' | 'apple',
+            providerId: firebaseUser.uid,
+            ...(firebaseUser.email && { email: firebaseUser.email }),
+            ...(firebaseUser.displayName && { displayName: firebaseUser.displayName }),
+            ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL })
+          });
+          console.log('✅ Social provider added/updated for existing user');
+        } catch (providerError: any) {
+          console.warn('⚠️ Failed to add social provider:', providerError.message);
+        }
+        
+        // Update user data for JWT with existing user info
+        user.id = existingUser.id;
+        user.email = existingUser.email;
+        user.name = existingUser.displayName || firebaseUser.displayName || 'User';
+      } else {
+        // Create new user in database
+        const userData = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          displayName: firebaseUser.displayName || 'User',
+          ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL }),
+          type: 'user' as const,
+          isActive: !firebaseUser.disabled
+        };
+        await UserModel.create(userData);
+        console.log('✅ User created in database');
+        
+        // Add social provider
+        await UserModel.addSocialProvider(firebaseUser.uid, {
+          provider: provider as 'google' | 'facebook' | 'twitter' | 'apple',
+          providerId: firebaseUser.uid,
+          ...(firebaseUser.email && { email: firebaseUser.email }),
+          ...(firebaseUser.displayName && { displayName: firebaseUser.displayName }),
+          ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL })
+        });
+        console.log('✅ Social provider added to user');
+      }
+    } catch (dbError: any) {
+      console.warn('⚠️ Failed to store user in database:', dbError.message);
+      // Continue without database storage - not critical for auth flow
+    }
 
     console.log('🔄 Generating JWT token...');
     const deviceId = req.headers['x-device-id'] as string;

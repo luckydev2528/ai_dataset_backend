@@ -214,6 +214,7 @@ export const getUserByUid = async (uid: string): Promise<admin.auth.UserRecord> 
 
 // Helper function to create user
 export const createUser = async (userData: {
+  uid?: string;
   email: string;
   password?: string;
   displayName?: string;

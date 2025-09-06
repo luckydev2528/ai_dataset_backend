@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { TwitterOAuthService } from '../../services/auth/twitterOAuthService';
-import { verifyIdToken, createCustomToken } from '../../services/auth/firebaseAdmin';
+import { verifyIdToken, createCustomToken, createUser, getUserByUid, getUserByEmail } from '../../services/auth/firebaseAdmin';
 import { JWTService } from '../../services/auth/jwtService';
 import { SessionService } from '../../services/session/SessionService';
 import { ApiResponse } from '../../types';
@@ -114,13 +114,105 @@ export const processTwitterAuth = async (req: Request, res: Response): Promise<v
 
     console.log('📝 Twitter OAuth result retrieved:', { userId: result.userId, screenName: result.screenName });
 
+    // Handle multi-provider authentication
+    const userEmail = result.email || `twitter_${result.userId}@app.local`;
+    let firebaseUid: string;
+    let isNewUser = false;
+    
+    try {
+      // First, check if a user with this email already exists
+      const existingUserByEmail = await getUserByEmail(userEmail);
+      
+      if (existingUserByEmail) {
+        // User exists with this email, use their UID
+        firebaseUid = existingUserByEmail.uid;
+        console.log('✅ Found existing user with email:', userEmail);
+        
+        // Add Twitter as a linked provider to the existing user
+        try {
+          const existingDbUser = await UserModel.getByUid(firebaseUid);
+          if (existingDbUser) {
+            await UserModel.addSocialProvider(firebaseUid, {
+              provider: 'twitter',
+              providerId: result.userId,
+              email: userEmail,
+              displayName: result.screenName
+            });
+            console.log('✅ Twitter provider linked to existing user');
+          } else {
+            // User exists in Firebase Auth but not in database - create database record
+            console.log('🔄 Creating database record for existing Firebase Auth user...');
+            const userData = {
+              uid: firebaseUid,
+              email: userEmail,
+              displayName: existingUserByEmail.displayName || result.screenName,
+              type: 'user' as const,
+              isActive: true
+            };
+            await UserModel.create(userData);
+            console.log('✅ Database record created for existing user');
+            
+            // Now add Twitter provider
+            await UserModel.addSocialProvider(firebaseUid, {
+              provider: 'twitter',
+              providerId: result.userId,
+              email: userEmail,
+              displayName: result.screenName
+            });
+            console.log('✅ Twitter provider linked to existing user');
+          }
+        } catch (linkError: any) {
+          console.warn('⚠️ Failed to link Twitter provider:', linkError.message);
+          // Continue without linking - not critical for auth flow
+        }
+      } else {
+        // No user exists with this email, create new user
+        firebaseUid = `twitter_${result.userId}`;
+        isNewUser = true;
+        
+        console.log('🔄 Creating new Firebase Auth user...');
+        await createUser({
+          uid: firebaseUid,
+          email: userEmail,
+          displayName: result.screenName,
+          disabled: false
+        });
+        console.log('✅ New Firebase Auth user created');
+      }
+    } catch (error: any) {
+      if (error.message.includes('email-already-exists')) {
+        // Handle edge case where email exists but getUserByEmail didn't find it
+        console.log('🔄 Email exists but not found by getUserByEmail, trying to find by UID...');
+        
+        // Try to find user by checking if Twitter UID exists
+        try {
+          const existingTwitterUser = await getUserByUid(`twitter_${result.userId}`);
+          firebaseUid = existingTwitterUser.uid;
+          console.log('✅ Found existing Twitter user');
+        } catch (uidError: any) {
+          // Last resort: create with a unique UID
+          firebaseUid = `twitter_${result.userId}_${Date.now()}`;
+          console.log('🔄 Creating user with unique UID:', firebaseUid);
+          await createUser({
+            uid: firebaseUid,
+            email: userEmail,
+            displayName: result.screenName,
+            disabled: false
+          });
+          isNewUser = true;
+          console.log('✅ Firebase Auth user created with unique UID');
+        }
+      } else {
+        throw error;
+      }
+    }
+
     // Create Firebase custom token
-    const firebaseUid = `twitter_${result.userId}`;
     const firebaseToken = await createCustomToken(firebaseUid, {
       provider: 'twitter',
       screen_name: result.screenName,
       twitter_id: result.userId,
-      email: result.email || `twitter_${result.userId}@app.local`
+      email: userEmail
     });
 
     console.log('✅ Firebase custom token created');
@@ -128,7 +220,7 @@ export const processTwitterAuth = async (req: Request, res: Response): Promise<v
     // Create user object for database
     const userData = {
       uid: firebaseUid,
-      email: result.email || `twitter_${result.userId}@app.local`,
+      email: userEmail, // Use consistent email
       name: result.screenName,
       // photo: undefined, // Omitted to avoid undefined values in Firestore
       type: 'user' as const,
@@ -138,7 +230,7 @@ export const processTwitterAuth = async (req: Request, res: Response): Promise<v
     // Create user object for JWT tokens
     const jwtUserData = {
       id: firebaseUid,
-      email: result.email || `twitter_${result.userId}@app.local`,
+      email: userEmail, // Use consistent email
       name: result.screenName,
       photo: undefined,
       type: 'twitter' as const,
@@ -150,16 +242,28 @@ export const processTwitterAuth = async (req: Request, res: Response): Promise<v
 
     // Store/update user in database
     try {
-      const existingUser = await UserModel.getByUid(userData.uid);
+      const existingUser = await UserModel.getByUid(firebaseUid);
       if (existingUser) {
+        // Update existing user
         await UserModel.update(existingUser.id, { 
           lastLoginAt: jwtUserData.lastLoginAt,
           updatedAt: jwtUserData.updatedAt
         });
         console.log('✅ User updated in database');
+        
+        // Update user data for JWT with existing user info
+        jwtUserData.id = existingUser.id;
+        jwtUserData.email = existingUser.email;
+        jwtUserData.name = existingUser.displayName || result.screenName;
       } else {
-        await UserModel.create(userData);
-        console.log('✅ User created in database');
+        // Create new user only if this is a new user
+        if (isNewUser) {
+          await UserModel.create(userData);
+          console.log('✅ User created in database');
+        } else {
+          // This case is now handled above in the provider linking logic
+          console.log('✅ User database record will be created during provider linking');
+        }
       }
     } catch (dbError: any) {
       console.warn('⚠️ Failed to store user in database:', dbError.message);
@@ -251,13 +355,105 @@ export const getTwitterResult = async (req: Request, res: Response): Promise<voi
 
     console.log('📝 Twitter OAuth result retrieved:', { userId: result.userId, screenName: result.screenName });
 
+    // Handle multi-provider authentication
+    const userEmail = result.email || `twitter_${result.userId}@app.local`;
+    let firebaseUid: string;
+    let isNewUser = false;
+    
+    try {
+      // First, check if a user with this email already exists
+      const existingUserByEmail = await getUserByEmail(userEmail);
+      
+      if (existingUserByEmail) {
+        // User exists with this email, use their UID
+        firebaseUid = existingUserByEmail.uid;
+        console.log('✅ Found existing user with email:', userEmail);
+        
+        // Add Twitter as a linked provider to the existing user
+        try {
+          const existingDbUser = await UserModel.getByUid(firebaseUid);
+          if (existingDbUser) {
+            await UserModel.addSocialProvider(firebaseUid, {
+              provider: 'twitter',
+              providerId: result.userId,
+              email: userEmail,
+              displayName: result.screenName
+            });
+            console.log('✅ Twitter provider linked to existing user');
+          } else {
+            // User exists in Firebase Auth but not in database - create database record
+            console.log('🔄 Creating database record for existing Firebase Auth user...');
+            const userData = {
+              uid: firebaseUid,
+              email: userEmail,
+              displayName: existingUserByEmail.displayName || result.screenName,
+              type: 'user' as const,
+              isActive: true
+            };
+            await UserModel.create(userData);
+            console.log('✅ Database record created for existing user');
+            
+            // Now add Twitter provider
+            await UserModel.addSocialProvider(firebaseUid, {
+              provider: 'twitter',
+              providerId: result.userId,
+              email: userEmail,
+              displayName: result.screenName
+            });
+            console.log('✅ Twitter provider linked to existing user');
+          }
+        } catch (linkError: any) {
+          console.warn('⚠️ Failed to link Twitter provider:', linkError.message);
+          // Continue without linking - not critical for auth flow
+        }
+      } else {
+        // No user exists with this email, create new user
+        firebaseUid = `twitter_${result.userId}`;
+        isNewUser = true;
+        
+        console.log('🔄 Creating new Firebase Auth user...');
+        await createUser({
+          uid: firebaseUid,
+          email: userEmail,
+          displayName: result.screenName,
+          disabled: false
+        });
+        console.log('✅ New Firebase Auth user created');
+      }
+    } catch (error: any) {
+      if (error.message.includes('email-already-exists')) {
+        // Handle edge case where email exists but getUserByEmail didn't find it
+        console.log('🔄 Email exists but not found by getUserByEmail, trying to find by UID...');
+        
+        // Try to find user by checking if Twitter UID exists
+        try {
+          const existingTwitterUser = await getUserByUid(`twitter_${result.userId}`);
+          firebaseUid = existingTwitterUser.uid;
+          console.log('✅ Found existing Twitter user');
+        } catch (uidError: any) {
+          // Last resort: create with a unique UID
+          firebaseUid = `twitter_${result.userId}_${Date.now()}`;
+          console.log('🔄 Creating user with unique UID:', firebaseUid);
+          await createUser({
+            uid: firebaseUid,
+            email: userEmail,
+            displayName: result.screenName,
+            disabled: false
+          });
+          isNewUser = true;
+          console.log('✅ Firebase Auth user created with unique UID');
+        }
+      } else {
+        throw error;
+      }
+    }
+
     // Create Firebase custom token
-    const firebaseUid = `twitter_${result.userId}`;
     const firebaseToken = await createCustomToken(firebaseUid, {
       provider: 'twitter',
       screen_name: result.screenName,
       twitter_id: result.userId,
-      email: result.email || `twitter_${result.userId}@app.local`
+      email: userEmail
     });
 
     console.log('✅ Firebase custom token created');
@@ -265,7 +461,7 @@ export const getTwitterResult = async (req: Request, res: Response): Promise<voi
     // Create user object for database
     const userData = {
       uid: firebaseUid,
-      email: result.email || `twitter_${result.userId}@app.local`,
+      email: userEmail, // Use consistent email
       name: result.screenName,
       // photo: undefined, // Omitted to avoid undefined values in Firestore
       type: 'user' as const,
@@ -275,7 +471,7 @@ export const getTwitterResult = async (req: Request, res: Response): Promise<voi
     // Create user object for JWT tokens
     const jwtUserData = {
       id: firebaseUid,
-      email: result.email || `twitter_${result.userId}@app.local`,
+      email: userEmail, // Use consistent email
       name: result.screenName,
       photo: undefined,
       type: 'twitter' as const,
@@ -287,16 +483,28 @@ export const getTwitterResult = async (req: Request, res: Response): Promise<voi
 
     // Store/update user in database
     try {
-      const existingUser = await UserModel.getByUid(userData.uid);
+      const existingUser = await UserModel.getByUid(firebaseUid);
       if (existingUser) {
+        // Update existing user
         await UserModel.update(existingUser.id, { 
           lastLoginAt: jwtUserData.lastLoginAt,
           updatedAt: jwtUserData.updatedAt
         });
         console.log('✅ User updated in database');
+        
+        // Update user data for JWT with existing user info
+        jwtUserData.id = existingUser.id;
+        jwtUserData.email = existingUser.email;
+        jwtUserData.name = existingUser.displayName || result.screenName;
       } else {
-        await UserModel.create(userData);
-        console.log('✅ User created in database');
+        // Create new user only if this is a new user
+        if (isNewUser) {
+          await UserModel.create(userData);
+          console.log('✅ User created in database');
+        } else {
+          // This case is now handled above in the provider linking logic
+          console.log('✅ User database record will be created during provider linking');
+        }
       }
     } catch (dbError: any) {
       console.warn('⚠️ Failed to store user in database:', dbError.message);
