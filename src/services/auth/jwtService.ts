@@ -239,10 +239,17 @@ export class JWTService {
   }
 
   /**
-   * Revoke a specific token
+   * Revoke a specific token (with duplicate prevention)
    */
   static async revokeToken(token: string): Promise<void> {
     try {
+      // Check if token is already blacklisted to prevent duplicate revocations
+      const isAlreadyBlacklisted = await redisService.isBlacklisted(token);
+      if (isAlreadyBlacklisted) {
+        console.log('Token already revoked, skipping duplicate revocation');
+        return;
+      }
+      
       // Get token expiration to set appropriate TTL
       const decoded = this.decodeToken(token);
       const expiresIn = decoded?.exp ? decoded.exp - Math.floor(Date.now() / 1000) : 3600;
@@ -272,19 +279,29 @@ export class JWTService {
   }
 
   /**
-   * Revoke all tokens for a specific device
+   * Revoke all tokens for a specific device (with duplicate prevention)
    */
   static async revokeDeviceTokens(userId: string, deviceId: string): Promise<void> {
     try {
-      // This would require a more complex query in Redis
-      // For now, we'll implement a simple approach
-      // In a production system, you might want to maintain device-specific indexes
+      // Check if we've already revoked tokens for this device recently
+      const revocationKey = `device_revoked:${userId}:${deviceId}`;
+      const alreadyRevoked = await redisService.get(revocationKey);
+      
+      if (alreadyRevoked) {
+        console.log(`Device tokens already revoked for user ${userId} on device ${deviceId}, skipping duplicate revocation`);
+        return;
+      }
+      
+      // Mark this device as revoked for 5 minutes to prevent duplicate revocations
+      await redisService.set(revocationKey, 'revoked', 300); // 5 minutes TTL
+      
       console.log(`Revoking tokens for user ${userId} on device ${deviceId}`);
       
       // Log token revocation
       logTokenRevocation(userId, deviceId, 'Device tokens revoked');
       
       // Implementation would depend on your specific Redis structure
+      // For now, we'll rely on the session service to handle device-specific token cleanup
     } catch (error) {
       console.error('Error revoking device tokens:', error);
     }

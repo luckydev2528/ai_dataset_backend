@@ -20,6 +20,8 @@ import {
   addSocialProviderToUser,
   resolveFirebaseUserWithFallback
 } from '../../utils/authUtils';
+import { UserStateValidator } from '../../utils/userStateValidator';
+import { areDatesEqual } from '../../utils/dateUtils';
 import { createStandardUserObject, createUserDataForDatabase, createJWTUserData } from '../../utils/userUtils';
 import { DatabaseErrorHandler } from '../../utils/errorHandlers';
 import { Logger } from '../../utils/logger';
@@ -133,48 +135,82 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
     let user: any;
 
     if (existingUser) {
-      // Update existing user
-      await DatabaseErrorHandler.handleUserOperation(
-        () => UserModel.update(existingUser.id, { 
-          lastLoginAt: new Date(),
-          updatedAt: new Date()
-        }),
-        'update',
-        true
-      );
+      // Batch all updates into a single operation to prevent multiple database calls
+      const updateData: any = {
+        lastLoginAt: new Date(),
+        updatedAt: new Date()
+      };
       
-      // Add social provider if it doesn't exist
-      await DatabaseErrorHandler.handleUserOperation(
-        () => addSocialProviderToUser(firebaseUser.uid, provider, firebaseUser),
-        'social provider addition',
-        true
-      );
+      // Check if we need to add social provider
+      const hasProvider = existingUser.socialProviders?.some(p => p.provider === provider);
+      if (!hasProvider) {
+        // Add social provider in the same update operation
+        const socialProviders = existingUser.socialProviders || [];
+        const newProvider = {
+          provider: provider as 'google' | 'facebook' | 'twitter' | 'apple',
+          providerId: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+          connectedAt: new Date()
+        };
+        updateData.socialProviders = [...socialProviders, newProvider];
+      }
       
-    // Use Firebase UID for JWT token consistency (not database ID)
-    user = createStandardUserObject(firebaseUser, userType, firebaseUser.uid);
-    
-    // Update user data with existing user info
-    user.email = existingUser.email;
-    user.name = existingUser.displayName || firebaseUser.displayName || 'User';
-    
-    Logger.info('AUTH: Using Firebase UID for JWT token', { 
-      firebaseUid: firebaseUser.uid, 
-      databaseId: existingUser.id,
-      userType 
-    });
+      // Only update if there are actual changes
+      const needsUpdate = 
+        !existingUser.lastLoginAt || 
+        !areDatesEqual(existingUser.lastLoginAt, updateData.lastLoginAt) ||
+        !hasProvider;
+      
+      if (needsUpdate) {
+        await DatabaseErrorHandler.handleUserOperation(
+          () => UserModel.update(existingUser.id, updateData),
+          'update',
+          true
+        );
+        Logger.info('AUTH: User updated with batched operations', { 
+          firebaseUid: firebaseUser.uid, 
+          databaseId: existingUser.id,
+          userType,
+          addedProvider: !hasProvider
+        });
+      } else {
+        Logger.info('AUTH: User data unchanged, skipping database update', { 
+          firebaseUid: firebaseUser.uid, 
+          databaseId: existingUser.id,
+          userType
+        });
+      }
+      
+      // Use Firebase UID for JWT token consistency (not database ID)
+      user = createStandardUserObject(firebaseUser, userType, firebaseUser.uid);
+      
+      // Update user data with existing user info
+      user.email = existingUser.email;
+      user.name = existingUser.displayName || firebaseUser.displayName || 'User';
+      
+      Logger.info('AUTH: Using Firebase UID for JWT token', { 
+        firebaseUid: firebaseUser.uid, 
+        databaseId: existingUser.id,
+        userType 
+      });
     } else {
-      // Create new user in database
+      // Create new user in database with social provider included
       const userData = createUserDataForDatabase(firebaseUser, 'user');
+      const socialProvider = {
+        provider: provider as 'google' | 'facebook' | 'twitter' | 'apple',
+        providerId: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
+        connectedAt: new Date()
+      };
+      userData.socialProviders = [socialProvider];
+      
       const newUser = await DatabaseErrorHandler.handleUserOperation(
         () => UserModel.create(userData),
         'creation',
-        true
-      );
-      
-      // Add social provider
-      await DatabaseErrorHandler.handleUserOperation(
-        () => addSocialProviderToUser(firebaseUser.uid, provider, firebaseUser),
-        'social provider addition',
         true
       );
       
@@ -186,6 +222,36 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
         databaseId: newUser?.id,
         userType 
       });
+    }
+
+    // Validate user state consistency before proceeding
+    const validationResult = await UserStateValidator.validateAuthFlowConsistency(
+      firebaseUser.uid,
+      provider,
+      firebaseUser.email
+    );
+
+    if (!validationResult.isConsistent) {
+      Logger.warning('User state validation issues detected', {
+        firebaseUid: firebaseUser.uid,
+        provider,
+        issues: validationResult.issues,
+        recommendations: validationResult.recommendations
+      });
+
+      // Auto-fix common issues
+      const autoFixResult = await UserStateValidator.autoFixUserState(firebaseUser.uid);
+      if (autoFixResult.fixed) {
+        Logger.info('User state auto-fixed', {
+          firebaseUid: firebaseUser.uid,
+          fixesApplied: autoFixResult.fixesApplied
+        });
+      } else {
+        Logger.warning('Failed to auto-fix user state', {
+          firebaseUid: firebaseUser.uid,
+          errors: autoFixResult.errors
+        });
+      }
     }
 
     const deviceId = getDeviceId(req);
@@ -468,6 +534,42 @@ export const revokeOtherSessions = asyncHandler(async (req: AuthenticatedRequest
   const { response, statusCode } = createSuccessResponse(
     `${revokedCount} other sessions revoked successfully`,
     { revokedCount }
+  );
+  res.status(statusCode).json(response);
+});
+
+/**
+ * Validate user state (for debugging and maintenance)
+ */
+export const validateUserState = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  requireAuth(req, res, () => {});
+
+  const firebaseUid = req.user!.id;
+  const validationResult = await UserStateValidator.validateUserState(firebaseUid);
+  const authSummary = await UserStateValidator.getUserAuthSummary(firebaseUid);
+
+  const { response, statusCode } = createSuccessResponse(
+    'User state validation completed',
+    {
+      validation: validationResult,
+      summary: authSummary
+    }
+  );
+  res.status(statusCode).json(response);
+});
+
+/**
+ * Auto-fix user state issues (for debugging and maintenance)
+ */
+export const autoFixUserState = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  requireAuth(req, res, () => {});
+
+  const firebaseUid = req.user!.id;
+  const fixResult = await UserStateValidator.autoFixUserState(firebaseUid);
+
+  const { response, statusCode } = createSuccessResponse(
+    fixResult.fixed ? 'User state auto-fix completed' : 'User state auto-fix failed',
+    fixResult
   );
   res.status(statusCode).json(response);
 });

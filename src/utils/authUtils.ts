@@ -5,6 +5,7 @@ import { UserModel } from '../services/database/models/userModel';
 import { getUserByUid, getUserByEmail, createUser } from '../services/auth/firebaseAdmin';
 import { FirebaseWrapper } from '../services/firebase/firebaseWrapper';
 import { Logger } from './logger';
+import { areDatesEqual } from './dateUtils';
 
 export interface UserData {
   id: string;
@@ -264,9 +265,23 @@ export const addSocialProviderToUser = async (
   provider: string,
   firebaseUser: any
 ): Promise<void> => {
+  // Get the provider-specific ID from Firebase user's provider data
+  let providerId = firebaseUser.uid; // Fallback to Firebase UID
+  
+  if (firebaseUser.providerData && firebaseUser.providerData.length > 0) {
+    // Find the matching provider data
+    const providerData = firebaseUser.providerData.find((p: any) => 
+      p.providerId.includes(provider) || p.providerId.includes('google.com')
+    );
+    
+    if (providerData) {
+      providerId = providerData.uid; // Use the provider-specific UID
+    }
+  }
+  
   await UserModel.addSocialProvider(firebaseUid, {
     provider: provider as 'google' | 'facebook' | 'twitter' | 'apple',
-    providerId: firebaseUser.uid,
+    providerId: providerId,
     ...(firebaseUser.email && { email: firebaseUser.email }),
     ...(firebaseUser.displayName && { displayName: firebaseUser.displayName }),
     ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL })
@@ -274,7 +289,7 @@ export const addSocialProviderToUser = async (
 };
 
 /**
- * Store or update user in database
+ * Store or update user in database with batching to prevent multiple updates
  */
 export const storeOrUpdateUser = async (
   firebaseUid: string,
@@ -285,12 +300,25 @@ export const storeOrUpdateUser = async (
   try {
     const existingUser = await UserModel.getByUid(firebaseUid);
     if (existingUser) {
-      // Update existing user
-      await UserModel.update(existingUser.id, { 
+      // Batch all updates into a single operation to prevent multiple database calls
+      const updateData: any = {
         lastLoginAt: jwtUserData.lastLoginAt,
         updatedAt: jwtUserData.updatedAt
-      });
-      console.log('✅ User updated in database');
+      };
+      
+      // Only update if the data has actually changed to prevent unnecessary updates
+      const needsUpdate = 
+        !existingUser.lastLoginAt || 
+        !areDatesEqual(existingUser.lastLoginAt, jwtUserData.lastLoginAt) ||
+        !existingUser.updatedAt ||
+        !areDatesEqual(existingUser.updatedAt, jwtUserData.updatedAt);
+      
+      if (needsUpdate) {
+        await UserModel.update(existingUser.id, updateData);
+        console.log('✅ User updated in database (batched)');
+      } else {
+        console.log('✅ User data unchanged, skipping database update');
+      }
       
       // Update user data for JWT with existing user info
       jwtUserData.id = existingUser.id;

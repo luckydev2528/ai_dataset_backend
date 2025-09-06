@@ -12,6 +12,8 @@ import {
   getUserSessions,
   revokeSession,
   revokeOtherSessions,
+  validateUserState,
+  autoFixUserState,
 } from '../controllers/auth/authController';
 import {
   initiateTwitterAuth,
@@ -143,5 +145,19 @@ router.get('/twitter/callback', handleTwitterCallback);
  * @access  Public
  */
 router.get('/twitter/result/:sessionId', getTwitterResult);
+
+/**
+ * @route   GET /api/auth/validate-state
+ * @desc    Validate user state consistency (for debugging and maintenance)
+ * @access  Private
+ */
+router.get('/validate-state', authenticateJWT, requireAuth, validateUserState);
+
+/**
+ * @route   POST /api/auth/auto-fix-state
+ * @desc    Auto-fix user state issues (for debugging and maintenance)
+ * @access  Private
+ */
+router.post('/auto-fix-state', authenticateJWT, requireAuth, autoFixUserState);
 
 export default router;

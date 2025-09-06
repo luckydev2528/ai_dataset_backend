@@ -47,6 +47,25 @@ export class SessionService {
     
     await redisService.storeSession(sessionId, session);
     
+    // Check if this is a new device for the user and increment device count
+    try {
+      const existingSessions = await this.getUserSessions(userId);
+      const isNewDevice = !existingSessions.some(s => s.deviceId === deviceId);
+      
+      if (isNewDevice) {
+        await UserModel.incrementDeviceCount(userId);
+      }
+    } catch (error) {
+      console.warn('Failed to check/increment device count:', error);
+    }
+    
+    // Increment session count for the user
+    try {
+      await UserModel.incrementSessionCount(userId);
+    } catch (error) {
+      console.warn('Failed to increment session count:', error);
+    }
+    
     // Clean up old sessions for this user (keep only last 5 sessions per user)
     await this.cleanupOldSessions(userId);
     
@@ -88,6 +107,25 @@ export class SessionService {
     if (session) {
       await redisService.updateSession(sessionId, { isActive: false });
       
+      // Decrement session count
+      try {
+        await UserModel.decrementSessionCount(session.userId);
+      } catch (error) {
+        console.warn('Failed to decrement session count:', error);
+      }
+      
+      // Check if this was the last session for this device and decrement device count
+      try {
+        const remainingSessions = await this.getUserSessions(session.userId);
+        const hasOtherSessionsOnDevice = remainingSessions.some(s => s.deviceId === session.deviceId);
+        
+        if (!hasOtherSessionsOnDevice && session.deviceId) {
+          await UserModel.decrementDeviceCount(session.userId);
+        }
+      } catch (error) {
+        console.warn('Failed to check/decrement device count:', error);
+      }
+      
       // Also revoke associated tokens
       if (session.deviceId) {
         // session.userId is now Firebase UID, which matches JWT tokens
@@ -111,6 +149,19 @@ export class SessionService {
         await redisService.updateSession(session.sessionId, { isActive: false });
         revokedCount++;
       }
+    }
+    
+    // Reset counters to 0 since all sessions are revoked
+    try {
+      const user = await UserModel.getByUid(userId);
+      if (user) {
+        await UserModel.update(user.id, {
+          sessionCount: 0,
+          deviceCount: 0
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to reset counters:', error);
     }
     
     // Also revoke all JWT tokens for the user (userId is now Firebase UID)

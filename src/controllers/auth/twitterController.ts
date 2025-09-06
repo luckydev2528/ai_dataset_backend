@@ -8,6 +8,7 @@ import {
   storeOrUpdateUser,
   handleMultiProviderAuth
 } from '../../utils/authUtils';
+import { UserStateValidator } from '../../utils/userStateValidator';
 import { createJWTUserData } from '../../utils/userUtils';
 import { Logger } from '../../utils/logger';
 import { 
@@ -41,7 +42,7 @@ const processTwitterAuthentication = async (
     }
   );
 
-  // Create Firebase custom token
+  // Create Firebase custom token for client-side authentication
   const firebaseToken = await FirebaseWrapper.createCustomToken(firebaseUid, {
     provider: 'twitter',
     screen_name: result.screenName,
@@ -68,8 +69,42 @@ const processTwitterAuthentication = async (
     'twitter'
   );
 
-  // Store/update user in database
-  await storeOrUpdateUser(firebaseUid, userData, jwtUserData, isNewUser);
+  // Store/update user in database with batched operations (only if needed)
+  if (isNewUser) {
+    await storeOrUpdateUser(firebaseUid, userData, jwtUserData, isNewUser);
+  } else {
+    // For existing users, we'll handle the update in the validation step to prevent duplicates
+    console.log('✅ Skipping duplicate user update for existing user');
+  }
+
+  // Validate user state consistency before proceeding
+  const validationResult = await UserStateValidator.validateAuthFlowConsistency(
+    firebaseUid,
+    'twitter',
+    userEmail
+  );
+
+  if (!validationResult.isConsistent) {
+    Logger.warning('Twitter auth user state validation issues detected', {
+      firebaseUid,
+      issues: validationResult.issues,
+      recommendations: validationResult.recommendations
+    });
+
+    // Auto-fix common issues
+    const autoFixResult = await UserStateValidator.autoFixUserState(firebaseUid);
+    if (autoFixResult.fixed) {
+      Logger.info('Twitter auth user state auto-fixed', {
+        firebaseUid,
+        fixesApplied: autoFixResult.fixesApplied
+      });
+    } else {
+      Logger.warning('Failed to auto-fix Twitter auth user state', {
+        firebaseUid,
+        errors: autoFixResult.errors
+      });
+    }
+  }
 
   // Generate app JWT tokens
   const deviceId = getDeviceId(req);
@@ -77,7 +112,7 @@ const processTwitterAuthentication = async (
   
   Logger.authSuccess('JWT tokens generated');
 
-  // Create session
+  // Create session only once to prevent multiple session creation
   try {
     const newSessionId = await createUserSession(userData.uid, deviceId, req);
     Logger.info('Session created', { sessionId: newSessionId });
