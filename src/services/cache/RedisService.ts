@@ -170,11 +170,22 @@ export class RedisService {
     expiresIn: number = 30 * 24 * 3600 // 30 days
   ): Promise<void> {
     try {
+      const key = `drr:session:${sessionId}`;
+      console.log(`🔍 Redis storeSession: Storing session ${key} for user ${sessionData.userId}, device ${sessionData.deviceId}`);
+      
       await this.redis.setex(
-        `session:${sessionId}`,
+        key,
         expiresIn,
         JSON.stringify(sessionData)
       );
+      
+      // Verify the session was stored
+      const stored = await this.redis.get(key);
+      if (stored) {
+        console.log(`✅ Redis storeSession: Session ${key} stored successfully`);
+      } else {
+        console.error(`❌ Redis storeSession: Failed to verify session ${key} was stored`);
+      }
     } catch (error) {
       console.error('Error storing session:', error);
       throw error;
@@ -183,7 +194,7 @@ export class RedisService {
 
   public async getSession(sessionId: string): Promise<any | null> {
     try {
-      const result = await this.redis.get(`session:${sessionId}`);
+      const result = await this.redis.get(`drr:session:${sessionId}`);
       return result ? JSON.parse(result) : null;
     } catch (error) {
       console.error('Error getting session:', error);
@@ -210,7 +221,7 @@ export class RedisService {
 
   public async deleteSession(sessionId: string): Promise<void> {
     try {
-      await this.redis.del(`session:${sessionId}`);
+      await this.redis.del(`drr:session:${sessionId}`);
     } catch (error) {
       console.error('Error deleting session:', error);
     }
@@ -218,19 +229,24 @@ export class RedisService {
 
   public async getUserSessions(userId: string): Promise<any[]> {
     try {
-      const keys = await this.redis.keys(`session:*`);
+      // Use the correct key pattern with drr: prefix
+      const keys = await this.redis.keys(`drr:session:*`);
+      console.log(`🔍 Redis getUserSessions: Found ${keys.length} session keys for user ${userId}`);
+      
       const sessions: any[] = [];
       
       for (const key of keys) {
         const data = await this.redis.get(key);
         if (data) {
           const sessionData = JSON.parse(data);
+          console.log(`🔍 Redis session key ${key}: userId=${sessionData.userId}, deviceId=${sessionData.deviceId}, isActive=${sessionData.isActive}`);
           if (sessionData.userId === userId) {
             sessions.push(sessionData);
           }
         }
       }
       
+      console.log(`🔍 Redis getUserSessions: Returning ${sessions.length} sessions for user ${userId}`);
       return sessions.sort((a, b) => new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime());
     } catch (error) {
       console.error('Error getting user sessions:', error);
@@ -240,7 +256,7 @@ export class RedisService {
 
   public async deleteUserSessions(userId: string): Promise<number> {
     try {
-      const keys = await this.redis.keys(`session:*`);
+      const keys = await this.redis.keys(`drr:session:*`);
       const pipeline = this.redis.pipeline();
       let deletedCount = 0;
       
@@ -365,6 +381,21 @@ export class RedisService {
   // Get Redis client for advanced operations
   public getClient(): Redis {
     return this.redis;
+  }
+
+  // Debug method to check what's actually in Redis
+  public async debugRedisKeys(): Promise<void> {
+    try {
+      const allKeys = await this.redis.keys(`*`);
+      console.log(`🔍 Redis Debug: Found ${allKeys.length} total keys:`, allKeys);
+      
+      for (const key of allKeys) {
+        const data = await this.redis.get(key);
+        console.log(`🔍 Redis Debug: Key ${key} = ${data ? 'EXISTS' : 'NULL'}`);
+      }
+    } catch (error) {
+      console.error('Error debugging Redis keys:', error);
+    }
   }
 }
 

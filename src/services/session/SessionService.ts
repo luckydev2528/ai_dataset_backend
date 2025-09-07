@@ -30,6 +30,34 @@ export class SessionService {
     userAgent: string,
     deviceInfo?: any
   ): Promise<string> {
+    // Check if this is a new device BEFORE creating the session
+    let isNewDevice = false;
+    try {
+      const existingSessions = await this.getUserSessions(userId);
+      const currentDeviceCount = await this.getDeviceCount(userId);
+      
+      console.log(`🔍 Device check for user ${userId}: current count=${currentDeviceCount}, existing sessions=${existingSessions.length}`);
+      
+      // Check if any existing session has the same device ID
+      isNewDevice = !existingSessions.some(s => s.deviceId === deviceId);
+      
+      if (isNewDevice) {
+        console.log(`🆕 New device detected for user ${userId}: ${deviceId} (count will be ${currentDeviceCount + 1})`);
+        await UserModel.incrementDeviceCount(userId);
+      } else {
+        console.log(`🔄 Existing device for user ${userId}: ${deviceId} (count remains ${currentDeviceCount})`);
+      }
+    } catch (error) {
+      console.warn('Failed to check/increment device count:', error);
+      // Assume it's a new device if we can't check
+      isNewDevice = true;
+      try {
+        await UserModel.incrementDeviceCount(userId);
+      } catch (incrementError) {
+        console.warn('Failed to increment device count:', incrementError);
+      }
+    }
+
     const sessionId = this.generateSessionId();
     const now = new Date();
     
@@ -45,18 +73,36 @@ export class SessionService {
       isActive: true,
     };
     
-    await redisService.storeSession(sessionId, session);
+    // Retry logic for Redis storage with exponential backoff
+    let retries = 3;
+    let lastError: any;
     
-    // Check if this is a new device for the user and increment device count
-    try {
-      const existingSessions = await this.getUserSessions(userId);
-      const isNewDevice = !existingSessions.some(s => s.deviceId === deviceId);
-      
-      if (isNewDevice) {
-        await UserModel.incrementDeviceCount(userId);
+    while (retries > 0) {
+      try {
+        await redisService.storeSession(sessionId, session);
+        
+        // Verify session was stored successfully
+        const storedSession = await redisService.getSession(sessionId);
+        if (!storedSession) {
+          throw new Error('Session storage verification failed');
+        }
+        
+        console.log(`✅ Session stored successfully: ${sessionId}`);
+        break; // Success
+      } catch (error) {
+        lastError = error;
+        retries--;
+        
+        if (retries === 0) {
+          console.error(`❌ Failed to store session after 3 retries: ${sessionId}`, error);
+          throw new Error(`Session storage failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        
+        // Exponential backoff: 200ms, 400ms, 800ms
+        const delay = 200 * Math.pow(2, 3 - retries);
+        console.warn(`⚠️ Session storage attempt failed, retrying in ${delay}ms (${retries} retries left)`, error);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-    } catch (error) {
-      console.warn('Failed to check/increment device count:', error);
     }
     
     // Increment session count for the user
@@ -96,7 +142,10 @@ export class SessionService {
    */
   static async getUserSessions(userId: string): Promise<SessionInfo[]> {
     const sessions = await redisService.getUserSessions(userId);
-    return sessions.filter(session => session.isActive);
+    const activeSessions = sessions.filter(session => session.isActive);
+    console.log(`📊 Found ${activeSessions.length} active sessions for user ${userId}:`, 
+      activeSessions.map(s => ({ deviceId: s.deviceId, createdAt: s.createdAt })));
+    return activeSessions;
   }
 
   /**
@@ -241,6 +290,19 @@ export class SessionService {
       inactiveSessions: 0,
       uniqueUsers: 0,
     };
+  }
+
+  /**
+   * Get device count for a user (for debugging)
+   */
+  static async getDeviceCount(userId: string): Promise<number> {
+    try {
+      const user = await UserModel.getByUid(userId);
+      return user?.deviceCount || 0;
+    } catch (error) {
+      console.warn('Failed to get device count:', error);
+      return 0;
+    }
   }
 
   /**

@@ -125,11 +125,25 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
     const userType = determineUserType(provider);
 
     // Store/update user in database
-    const existingUser = await DatabaseErrorHandler.handleUserOperation(
+    // First check if user exists by UID, then by email for multi-provider scenarios
+    let existingUser = await DatabaseErrorHandler.handleUserOperation(
       () => UserModel.getByUid(firebaseUser.uid),
       'retrieval',
       true
     );
+    
+    // If no user found by UID, check by email for multi-provider linking
+    if (!existingUser && firebaseUser.email) {
+      existingUser = await DatabaseErrorHandler.handleUserOperation(
+        () => UserModel.getByEmail(firebaseUser.email),
+        'retrieval',
+        true
+      );
+      
+      if (existingUser) {
+        console.log('🔄 Multi-provider authentication: Found existing user by email, will link providers');
+      }
+    }
 
     let databaseUserId: string;
     let user: any;
@@ -151,7 +165,7 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
           providerId: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
+          ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL }),
           connectedAt: new Date()
         };
         updateData.socialProviders = [...socialProviders, newProvider];
@@ -183,15 +197,16 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
         });
       }
       
-      // Use Firebase UID for JWT token consistency (not database ID)
-      user = createStandardUserObject(firebaseUser, userType, firebaseUser.uid);
+      // Use existing user's UID for JWT token consistency when linking providers
+      user = createStandardUserObject(firebaseUser, userType, existingUser.uid);
       
       // Update user data with existing user info
       user.email = existingUser.email;
       user.name = existingUser.displayName || firebaseUser.displayName || 'User';
       
-      Logger.info('AUTH: Using Firebase UID for JWT token', { 
+      Logger.info('AUTH: Using existing user UID for JWT token (multi-provider linking)', { 
         firebaseUid: firebaseUser.uid, 
+        existingUserUid: existingUser.uid,
         databaseId: existingUser.id,
         userType 
       });
@@ -203,7 +218,7 @@ export const socialAuth = asyncHandler(async (req: Request, res: Response) => {
         providerId: firebaseUser.uid,
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
-        photoURL: firebaseUser.photoURL,
+        ...(firebaseUser.photoURL && { photoURL: firebaseUser.photoURL }),
         connectedAt: new Date()
       };
       userData.socialProviders = [socialProvider];
@@ -449,14 +464,22 @@ export const logoutUser = asyncHandler(async (req: AuthenticatedRequest, res: Re
 
   if (req.user) {
     if (logoutAllDevices) {
-      // Revoke all tokens for user
+      // Revoke all tokens and sessions for user
       await JWTService.revokeAllUserTokens(req.user.id);
+      await SessionService.revokeAllUserSessions(req.user.id);
     } else if (clientRefreshToken) {
       // Try to extract device ID from refresh token and revoke only that device
       try {
         const decoded = JWTService.decodeToken(clientRefreshToken);
         if (decoded?.deviceId) {
           await JWTService.revokeDeviceTokens(req.user.id, decoded.deviceId);
+          // Also revoke the session for this device
+          const deviceId = req.headers['x-device-id'] as string || decoded.deviceId;
+          const sessions = await SessionService.getUserSessions(req.user.id);
+          const deviceSession = sessions.find(s => s.deviceId === deviceId);
+          if (deviceSession) {
+            await SessionService.revokeSession(deviceSession.sessionId);
+          }
         }
       } catch (error) {
         // If we can't decode, just continue with logout

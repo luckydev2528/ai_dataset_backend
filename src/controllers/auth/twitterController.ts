@@ -58,7 +58,14 @@ const processTwitterAuthentication = async (
     email: userEmail,
     name: result.screenName,
     type: 'user' as const,
-    isActive: true
+    isActive: true,
+    socialProviders: [{
+      provider: 'twitter' as const,
+      providerId: result.userId,
+      email: userEmail,
+      displayName: result.screenName,
+      connectedAt: new Date()
+    }]
   };
 
   // Create user object for JWT tokens
@@ -69,13 +76,8 @@ const processTwitterAuthentication = async (
     'twitter'
   );
 
-  // Store/update user in database with batched operations (only if needed)
-  if (isNewUser) {
-    await storeOrUpdateUser(firebaseUid, userData, jwtUserData, isNewUser);
-  } else {
-    // For existing users, we'll handle the update in the validation step to prevent duplicates
-    console.log('✅ Skipping duplicate user update for existing user');
-  }
+  // Store/update user in database with batched operations
+  await storeOrUpdateUser(firebaseUid, userData, jwtUserData, isNewUser);
 
   // Validate user state consistency before proceeding
   const validationResult = await UserStateValidator.validateAuthFlowConsistency(

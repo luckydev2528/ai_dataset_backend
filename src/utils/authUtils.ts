@@ -130,18 +130,19 @@ export const handleMultiProviderAuth = async (
   let isNewUser = false;
 
   try {
-    // First, check if a user with this email already exists
-    const existingUserByEmail = await getUserByEmail(userEmail);
+    // First, check if a user with this email already exists in the database
+    const existingDbUser = await UserModel.getByEmail(userEmail);
     
-    if (existingUserByEmail) {
-      // User exists with this email, use their UID
-      firebaseUid = existingUserByEmail.uid;
-      console.log('✅ Found existing user with email:', userEmail);
+    if (existingDbUser) {
+      // User exists in database, use their UID
+      firebaseUid = existingDbUser.uid;
+      console.log('✅ Found existing user in database with email:', userEmail);
       
-      // Add provider as a linked provider to the existing user
-      try {
-        const existingDbUser = await UserModel.getByUid(firebaseUid);
-        if (existingDbUser) {
+      // Check if this provider is already linked
+      const hasProvider = existingDbUser.socialProviders?.some(p => p.provider === provider);
+      if (!hasProvider) {
+        // Add this provider to existing user
+        try {
           await UserModel.addSocialProvider(firebaseUid, {
             provider,
             providerId: providerData.providerId,
@@ -150,46 +151,36 @@ export const handleMultiProviderAuth = async (
             ...(providerData.photoURL && { photoURL: providerData.photoURL })
           });
           console.log(`✅ ${provider} provider linked to existing user`);
-        } else {
-          // User exists in Firebase Auth but not in database - create database record
-          console.log('🔄 Creating database record for existing Firebase Auth user...');
-          const userData = {
-            uid: firebaseUid,
-            email: userEmail,
-            displayName: existingUserByEmail.displayName || providerData.displayName,
-            type: 'user' as const,
-            isActive: true
-          };
-          await UserModel.create(userData);
-          console.log('✅ Database record created for existing user');
-          
-          // Now add provider
-          await UserModel.addSocialProvider(firebaseUid, {
-            provider,
-            providerId: providerData.providerId,
-            email: userEmail,
-            displayName: providerData.displayName,
-            ...(providerData.photoURL && { photoURL: providerData.photoURL })
-          });
-          console.log(`✅ ${provider} provider linked to existing user`);
+        } catch (linkError: any) {
+          console.warn(`⚠️ Failed to link ${provider} provider:`, linkError.message);
         }
-      } catch (linkError: any) {
-        console.warn(`⚠️ Failed to link ${provider} provider:`, linkError.message);
-        // Continue without linking - not critical for auth flow
+      } else {
+        console.log(`✅ ${provider} provider already linked to user`);
       }
     } else {
-      // No user exists with this email, create new user
-      firebaseUid = `${provider}_${providerData.providerId}`;
-      isNewUser = true;
+      // No user exists in database, check if Firebase user exists
+      // Fix UID generation - ensure clean, consistent format
+      const cleanProviderId = providerData.providerId.replace(/[^a-zA-Z0-9_-]/g, '');
+      const providerUid = `${provider}_${cleanProviderId}`;
       
-      console.log('🔄 Creating new Firebase Auth user...');
-      await createUser({
-        uid: firebaseUid,
-        email: userEmail,
-        displayName: providerData.displayName,
-        disabled: false
-      });
-      console.log('✅ New Firebase Auth user created');
+      try {
+        const existingProviderUser = await getUserByUid(providerUid);
+        firebaseUid = existingProviderUser.uid;
+        console.log(`✅ Found existing ${provider} user in Firebase with UID:`, firebaseUid);
+      } catch (uidError: any) {
+        // No user exists anywhere, create new user
+        firebaseUid = providerUid;
+        isNewUser = true;
+        
+        console.log('🔄 Creating new Firebase Auth user...');
+        await createUser({
+          uid: firebaseUid,
+          email: userEmail,
+          displayName: providerData.displayName,
+          disabled: false
+        });
+        console.log('✅ New Firebase Auth user created');
+      }
     }
   } catch (error: any) {
     if (error.message.includes('email-already-exists')) {
@@ -197,13 +188,16 @@ export const handleMultiProviderAuth = async (
       console.log('🔄 Email exists but not found by getUserByEmail, trying to find by UID...');
       
       // Try to find user by checking if provider UID exists
+      const cleanProviderId = providerData.providerId.replace(/[^a-zA-Z0-9_-]/g, '');
+      const providerUid = `${provider}_${cleanProviderId}`;
+      
       try {
-        const existingProviderUser = await getUserByUid(`${provider}_${providerData.providerId}`);
+        const existingProviderUser = await getUserByUid(providerUid);
         firebaseUid = existingProviderUser.uid;
         console.log(`✅ Found existing ${provider} user`);
       } catch (uidError: any) {
         // Last resort: create with a unique UID
-        firebaseUid = `${provider}_${providerData.providerId}_${Date.now()}`;
+        firebaseUid = `${provider}_${cleanProviderId}_${Date.now()}`;
         console.log('🔄 Creating user with unique UID:', firebaseUid);
         await createUser({
           uid: firebaseUid,
@@ -288,10 +282,42 @@ export const addSocialProviderToUser = async (
   });
 };
 
+// Debounce map for user updates to prevent multiple rapid updates
+const updateDebounceMap = new Map<string, NodeJS.Timeout>();
+
 /**
  * Store or update user in database with batching to prevent multiple updates
  */
 export const storeOrUpdateUser = async (
+  firebaseUid: string,
+  userData: any,
+  jwtUserData: JWTUserData,
+  isNewUser: boolean
+): Promise<void> => {
+  const debounceKey = `${firebaseUid}_update`;
+  
+  // Clear existing timeout if any
+  if (updateDebounceMap.has(debounceKey)) {
+    clearTimeout(updateDebounceMap.get(debounceKey)!);
+    console.log(`🔄 Debouncing user update for ${firebaseUid}`);
+  }
+  
+  // Set new timeout for batched update
+  const timeout = setTimeout(async () => {
+    try {
+      await performUserUpdate(firebaseUid, userData, jwtUserData, isNewUser);
+    } finally {
+      updateDebounceMap.delete(debounceKey);
+    }
+  }, 100); // 100ms debounce
+  
+  updateDebounceMap.set(debounceKey, timeout);
+};
+
+/**
+ * Perform the actual user update operation
+ */
+const performUserUpdate = async (
   firebaseUid: string,
   userData: any,
   jwtUserData: JWTUserData,
