@@ -13,6 +13,8 @@ import { securityLogger } from './middleware/security/securityLogger';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import databaseRoutes from './routes/database';
+import taskRoutes from './routes/task';
+import userPointsRoutes from './routes/userPoints';
 import { initializeFirebaseAdmin } from './services/auth/firebaseAdmin';
 import { redisService } from './services/cache/RedisService';
 import CacheService from './services/cache/CacheService';
@@ -211,6 +213,8 @@ app.get('/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/database', databaseRoutes);
+app.use('/api/task', taskRoutes);
+app.use('/api/user-points', userPointsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -223,6 +227,8 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       user: '/api/user',
       database: '/api/database',
+      task: '/api/task',
+      userPoints: '/api/user-points',
     },
   });
 });
