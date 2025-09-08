@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import multer, { FileFilterCallback } from 'multer';
+import multer from 'multer';
 import { videoStorageService, VideoUploadOptions } from '../../services/storage/VideoStorageService';
 import { Logger } from '../../utils/logger';
 import { authenticateJWT } from '../../middleware/auth/auth';
@@ -13,7 +13,7 @@ const upload = multer({
     parts: 1000,
     files: 1,
   },
-  fileFilter: (req: Request, file: any, cb: FileFilterCallback): void => {
+  fileFilter: (req: Request, file: any, cb: any): void => {
     if (file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
