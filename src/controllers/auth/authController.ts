@@ -7,7 +7,7 @@ import {
   verifyPasswordResetCode, 
   confirmPasswordReset as confirmPasswordResetService
 } from '../../services/auth/firebaseAdmin';
-import { asyncHandler, AppError } from '../../middleware/error/errorHandler';
+import { asyncHandler, AppError } from '../../middleware/error';
 import { requireAuth } from '../../middleware/auth/authHelpers';
 import { UserModel } from '../../services/database/models/userModel';
 import { 

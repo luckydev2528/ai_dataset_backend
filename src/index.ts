@@ -6,6 +6,7 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 
+
 import { generalRateLimit, authRateLimit } from './middleware/rateLimit/redisRateLimit';
 import { securityLogger } from './middleware/security/securityLogger';
 import authRoutes from './routes/auth';

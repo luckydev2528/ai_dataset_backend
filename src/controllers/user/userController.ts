@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest, ApiResponse, UpdateUserData } from '../../types';
 import { FirebaseWrapper } from '../../services/firebase/firebaseWrapper';
-import { asyncHandler, AppError } from '../../middleware/error/errorHandler';
+import { asyncHandler, AppError } from '../../middleware/error';
 import { requireAuth } from '../../middleware/auth/authHelpers';
 import { createStandardUserObject } from '../../utils/userUtils';
 import { Logger } from '../../utils/logger';
