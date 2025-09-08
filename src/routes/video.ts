@@ -1,8 +1,7 @@
 import express from 'express';
 import { VideoController, uploadMiddleware } from '../controllers/video/videoController';
-import { authenticateJWT, authenticateJWTFast } from '../middleware/auth/auth';
+import { authenticateJWT } from '../middleware/auth/auth';
 import { generalRateLimit } from '../middleware/rateLimit/redisRateLimit';
-import { videoUploadTimeout } from '../middleware/timeout/videoUploadTimeout';
 
 const router = express.Router();
 
@@ -14,7 +13,7 @@ router.use(generalRateLimit);
  * @desc Upload a video file
  * @access Private
  */
-router.post('/upload', authenticateJWTFast, videoUploadTimeout(120000), uploadMiddleware, VideoController.uploadVideo);
+router.post('/upload', uploadMiddleware, authenticateJWT, VideoController.uploadVideo);
 
 /**
  * @route GET /api/video/:videoId
