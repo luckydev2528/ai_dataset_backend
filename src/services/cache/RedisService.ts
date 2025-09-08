@@ -6,19 +6,36 @@ export class RedisService {
   private isConnected: boolean = false;
 
   private constructor() {
-    const redisConfig: RedisOptions = {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      ...(process.env.REDIS_PASSWORD && { password: process.env.REDIS_PASSWORD }),
-      db: parseInt(process.env.REDIS_DB || '0'),
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      connectTimeout: 10000,
-      commandTimeout: 5000,
-      keyPrefix: process.env.REDIS_KEY_PREFIX || 'drr:',
-    };
+    // Support both local host/port and production REDIS_URL with optional TLS
+    const useUrl = !!process.env.REDIS_URL;
+    const enableTls = (process.env.REDIS_TLS || '').toLowerCase() === 'true' || (process.env.REDIS_URL || '').startsWith('rediss://');
 
-    this.redis = new Redis(redisConfig);
+    if (useUrl) {
+      const optionsFromUrl: RedisOptions = {
+        db: parseInt(process.env.REDIS_DB || '0'),
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
+        keyPrefix: process.env.REDIS_KEY_PREFIX || 'drr:',
+        ...(enableTls ? { tls: {} as any } : {}),
+      };
+      this.redis = new Redis(process.env.REDIS_URL as string, optionsFromUrl);
+    } else {
+      const redisConfig: RedisOptions = {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        ...(process.env.REDIS_PASSWORD && { password: process.env.REDIS_PASSWORD }),
+        db: parseInt(process.env.REDIS_DB || '0'),
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+        connectTimeout: 10000,
+        commandTimeout: 5000,
+        keyPrefix: process.env.REDIS_KEY_PREFIX || 'drr:',
+        ...(enableTls ? { tls: {} as any } : {}),
+      };
+      this.redis = new Redis(redisConfig);
+    }
     this.setupEventHandlers();
   }
 
