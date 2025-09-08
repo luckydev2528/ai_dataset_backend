@@ -14,6 +14,8 @@ import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import databaseRoutes from './routes/database';
 import videoRoutes from './routes/video';
+import taskRoutes from './routes/task';
+import userPointsRoutes from './routes/userPoints';
 import { initializeFirebaseAdmin } from './services/auth/firebaseAdmin';
 import { redisService } from './services/cache/RedisService';
 import CacheService from './services/cache/CacheService';
@@ -218,6 +220,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/video', videoRoutes);
+app.use('/api/task', taskRoutes);
+app.use('/api/user-points', userPointsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -225,27 +229,23 @@ app.get('/', (req, res) => {
     message: 'Data Refining React Native App Backend API',
     version: '1.0.0',
     status: 'running',
-      endpoints: {
-        health: '/health',
-        auth: '/api/auth',
-        user: '/api/user',
-        database: '/api/database',
-        video: '/api/video',
-      },
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      user: '/api/user',
+      database: '/api/database',
+      video: '/api/video',
+      task: '/api/task',
+      userPoints: '/api/user-points',
+    },
   });
 });
 
-// Error handling middleware
-app.use(notFoundHandler);
-app.use(errorHandler);
-
-// Start server
+// Start HTTP server with extended timeouts for video uploads
 async function startServer() {
   try {
-    // Initialize services first
     await initializeServices();
-    
-    // Start the HTTP server with extended timeouts for video uploads
+
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 Environment: ${process.env.NODE_ENV}`);

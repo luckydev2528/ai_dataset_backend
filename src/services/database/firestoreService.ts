@@ -11,6 +11,9 @@ export interface FirestoreCollection {
   analytics_aggregations: 'analytics_aggregations';
   logs: 'logs';
   config: 'config';
+  tasks: 'tasks';
+  user_points: 'user_points';
+  points_history: 'points_history';
 }
 
 export type CollectionName = keyof FirestoreCollection;
@@ -242,6 +245,8 @@ export class FirestoreService {
       
       const hasMore = snapshot.size === limit;
       
+      Logger.info(`Query with pagination completed for ${collectionName}: ${data.length} documents`);
+      
       return { data, lastDoc, hasMore };
     } catch (error) {
       Logger.error(`Error querying collection ${collectionName} with pagination:`, error as Record<string, any>);
@@ -266,17 +271,21 @@ export class FirestoreService {
         
         switch (op.type) {
           case 'create':
-            batch.set(docRef, {
-              ...op.data,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            });
+            if (op.data) {
+              batch.set(docRef, {
+                ...op.data,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              });
+            }
             break;
           case 'update':
-            batch.update(docRef, {
-              ...op.data,
-              updatedAt: new Date(),
-            });
+            if (op.data) {
+              batch.update(docRef, {
+                ...op.data,
+                updatedAt: new Date(),
+              });
+            }
             break;
           case 'delete':
             batch.delete(docRef);
@@ -285,7 +294,9 @@ export class FirestoreService {
       });
       
       const result = await batch.commit();
+      
       Logger.info(`Batch write completed: ${operations.length} operations`);
+      
       return result;
     } catch (error) {
       Logger.error('Error in batch write:', error as Record<string, any>);
@@ -320,12 +331,12 @@ export class FirestoreService {
       return doc.exists;
     } catch (error) {
       Logger.error(`Error checking document existence in ${collectionName}/${docId}:`, error as Record<string, any>);
-      throw error;
+      return false;
     }
   }
 
   /**
-   * Get document count
+   * Count documents in a collection
    */
   public async count(collectionName: CollectionName): Promise<number> {
     try {
@@ -333,28 +344,28 @@ export class FirestoreService {
       return snapshot.size;
     } catch (error) {
       Logger.error(`Error counting documents in ${collectionName}:`, error as Record<string, any>);
-      throw error;
+      return 0;
     }
   }
 
   /**
-   * Health check
+   * Health check for Firestore connection
    */
   public async healthCheck(): Promise<{ status: string; latency: number }> {
-    const start = Date.now();
+    const startTime = Date.now();
+    
     try {
-      // Simple read operation to test connection
-      await this.collection('config').limit(1).get();
-      const latency = Date.now() - start;
+      await this.getDB().collection('health').limit(1).get();
+      const latency = Date.now() - startTime;
+      
       return { status: 'healthy', latency };
     } catch (error) {
-      const latency = Date.now() - start;
-      Logger.error('Firestore health check failed:', error as Record<string, any>);
+      const latency = Date.now() - startTime;
       return { status: 'unhealthy', latency };
     }
   }
 }
 
-// Export singleton instance
+// Create and export a singleton instance
 export const firestoreService = FirestoreService.getInstance();
 export default firestoreService;

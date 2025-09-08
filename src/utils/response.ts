@@ -1,6 +1,9 @@
 import { Response } from 'express';
 import { ApiResponse } from '../types';
 
+// Re-export ApiResponse for use in controllers
+export { ApiResponse };
+
 /**
  * Send success response
  */
