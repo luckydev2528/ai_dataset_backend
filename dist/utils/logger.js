@@ -1,148 +1,88 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logger = exports.LogLevel = void 0;
+exports.Logger = exports.LogLevel = void 0;
 var LogLevel;
 (function (LogLevel) {
+    LogLevel["SUCCESS"] = "success";
+    LogLevel["WARNING"] = "warning";
     LogLevel["ERROR"] = "error";
-    LogLevel["WARN"] = "warn";
     LogLevel["INFO"] = "info";
-    LogLevel["DEBUG"] = "debug";
 })(LogLevel || (exports.LogLevel = LogLevel = {}));
 class Logger {
-    isDevelopment = process.env.NODE_ENV === 'development';
-    formatLog(entry) {
-        const baseLog = {
-            level: entry.level,
-            message: entry.message,
-            timestamp: entry.timestamp,
-        };
-        if (entry.requestId) {
-            baseLog.requestId = entry.requestId;
+    static formatMessage(level, message, data) {
+        const timestamp = new Date().toISOString();
+        const emoji = this.getEmoji(level);
+        const prefix = this.getPrefix(level);
+        let formattedMessage = `${emoji} ${prefix}: ${message}`;
+        if (data) {
+            formattedMessage += ` ${JSON.stringify(data)}`;
         }
-        if (entry.userId) {
-            baseLog.userId = entry.userId;
-        }
-        if (entry.ip) {
-            baseLog.ip = entry.ip;
-        }
-        if (entry.userAgent) {
-            baseLog.userAgent = entry.userAgent;
-        }
-        if (entry.url) {
-            baseLog.url = entry.url;
-        }
-        if (entry.method) {
-            baseLog.method = entry.method;
-        }
-        if (entry.statusCode) {
-            baseLog.statusCode = entry.statusCode;
-        }
-        if (entry.responseTime) {
-            baseLog.responseTime = entry.responseTime;
-        }
-        if (entry.error) {
-            baseLog.error = entry.error;
-        }
-        if (entry.metadata) {
-            baseLog.metadata = entry.metadata;
-        }
-        return JSON.stringify(baseLog);
+        return formattedMessage;
     }
-    log(level, message, metadata) {
-        const entry = {
-            level,
-            message,
-            timestamp: new Date().toISOString(),
-            ...metadata,
-        };
-        const formattedLog = this.formatLog(entry);
+    static getEmoji(level) {
         switch (level) {
+            case LogLevel.SUCCESS:
+                return '✅';
+            case LogLevel.WARNING:
+                return '⚠️';
             case LogLevel.ERROR:
-                console.error(formattedLog);
-                break;
-            case LogLevel.WARN:
-                console.warn(formattedLog);
-                break;
+                return '❌';
             case LogLevel.INFO:
-                console.info(formattedLog);
-                break;
-            case LogLevel.DEBUG:
-                if (this.isDevelopment) {
-                    console.debug(formattedLog);
-                }
-                break;
+                return 'ℹ️';
+            default:
+                return '📝';
         }
     }
-    error(message, metadata) {
-        this.log(LogLevel.ERROR, message, metadata);
-    }
-    warn(message, metadata) {
-        this.log(LogLevel.WARN, message, metadata);
-    }
-    info(message, metadata) {
-        this.log(LogLevel.INFO, message, metadata);
-    }
-    debug(message, metadata) {
-        this.log(LogLevel.DEBUG, message, metadata);
-    }
-    logRequest(req, res, responseTime) {
-        const metadata = {
-            requestId: req.headers['x-request-id'],
-            userId: req.user?.id,
-            ip: req.ip,
-            userAgent: req.get('User-Agent'),
-            url: req.originalUrl,
-            method: req.method,
-            statusCode: res.statusCode,
-            responseTime,
-        };
-        if (res.statusCode >= 400) {
-            this.error(`Request failed: ${req.method} ${req.originalUrl}`, metadata);
-        }
-        else {
-            this.info(`Request completed: ${req.method} ${req.originalUrl}`, metadata);
+    static getPrefix(level) {
+        switch (level) {
+            case LogLevel.SUCCESS:
+                return 'SUCCESS';
+            case LogLevel.WARNING:
+                return 'WARNING';
+            case LogLevel.ERROR:
+                return 'ERROR';
+            case LogLevel.INFO:
+                return 'INFO';
+            default:
+                return 'LOG';
         }
     }
-    logError(error, req, metadata) {
-        const errorMetadata = {
-            ...metadata,
-            error: {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-            },
-        };
-        if (req) {
-            errorMetadata.requestId = req.headers['x-request-id'];
-            errorMetadata.userId = req.user?.id;
-            errorMetadata.ip = req.ip;
-            errorMetadata.userAgent = req.get('User-Agent');
-            errorMetadata.url = req.originalUrl;
-            errorMetadata.method = req.method;
-        }
-        this.error(`Error occurred: ${error.message}`, errorMetadata);
+    static success(message, data) {
+        console.log(this.formatMessage(LogLevel.SUCCESS, message, data));
     }
-    logSecurity(event, req, metadata) {
-        const securityMetadata = {
-            event,
-            requestId: req.headers['x-request-id'],
-            userId: req.user?.id,
-            ip: req.ip,
-            userAgent: req.get('User-Agent'),
-            url: req.originalUrl,
-            method: req.method,
-            ...metadata,
-        };
-        this.warn(`Security event: ${event}`, securityMetadata);
+    static warning(message, data) {
+        console.warn(this.formatMessage(LogLevel.WARNING, message, data));
     }
-    logPerformance(operation, duration, metadata) {
-        this.info(`Performance: ${operation}`, {
-            operation,
-            duration,
-            ...metadata,
-        });
+    static error(message, data) {
+        console.error(this.formatMessage(LogLevel.ERROR, message, data));
+    }
+    static info(message, data) {
+        console.log(this.formatMessage(LogLevel.INFO, message, data));
+    }
+    static authSuccess(message, data) {
+        this.success(`AUTH: ${message}`, data);
+    }
+    static authError(message, data) {
+        this.error(`AUTH: ${message}`, data);
+    }
+    static dbSuccess(message, data) {
+        this.success(`DB: ${message}`, data);
+    }
+    static dbError(message, data) {
+        this.error(`DB: ${message}`, data);
+    }
+    static dbWarning(message, data) {
+        this.warning(`DB: ${message}`, data);
+    }
+    static firebaseSuccess(message, data) {
+        this.success(`FIREBASE: ${message}`, data);
+    }
+    static firebaseError(message, data) {
+        this.error(`FIREBASE: ${message}`, data);
+    }
+    static firebaseWarning(message, data) {
+        this.warning(`FIREBASE: ${message}`, data);
     }
 }
-exports.logger = new Logger();
-exports.default = exports.logger;
+exports.Logger = Logger;
 //# sourceMappingURL=logger.js.map

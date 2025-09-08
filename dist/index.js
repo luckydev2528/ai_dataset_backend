@@ -17,6 +17,7 @@ const securityLogger_1 = require("./middleware/security/securityLogger");
 const auth_1 = __importDefault(require("./routes/auth"));
 const user_1 = __importDefault(require("./routes/user"));
 const database_1 = __importDefault(require("./routes/database"));
+const video_1 = __importDefault(require("./routes/video"));
 const firebaseAdmin_1 = require("./services/auth/firebaseAdmin");
 const RedisService_1 = require("./services/cache/RedisService");
 const CacheService_1 = __importDefault(require("./services/cache/CacheService"));
@@ -168,6 +169,7 @@ app.get('/health', async (req, res) => {
 app.use('/api/auth', auth_1.default);
 app.use('/api/user', user_1.default);
 app.use('/api/database', database_1.default);
+app.use('/api/video', video_1.default);
 app.get('/', (req, res) => {
     res.json({
         message: 'Data Refining React Native App Backend API',
@@ -178,6 +180,7 @@ app.get('/', (req, res) => {
             auth: '/api/auth',
             user: '/api/user',
             database: '/api/database',
+            video: '/api/video',
         },
     });
 });

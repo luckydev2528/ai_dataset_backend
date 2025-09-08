@@ -5,7 +5,7 @@ import { FirebaseWrapper } from '../../services/firebase/firebaseWrapper';
 import { createStandardUserObject } from '../../utils/userUtils';
 import { Logger } from '../../utils/logger';
 import { requireAuth } from './authHelpers';
-import { determineUserType, extractTokenFromRequest, resolveFirebaseUserWithFallback } from '../../utils/authUtils';
+import { determineUserType, extractTokenFromRequest, resolveFirebaseUserWithFallback, resolveFirebaseUserFast } from '../../utils/authUtils';
 
 /**
  * JWT Authentication Middleware
@@ -158,6 +158,59 @@ export const optionalAuth = async (
 };
 
 // Note: requireRole is now imported from authHelpers.ts to avoid duplication
+
+/**
+ * Fast JWT Authentication Middleware for Video Uploads
+ * Uses simplified authentication to avoid timeouts
+ */
+export const authenticateJWTFast = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const token = extractTokenFromRequest(req);
+
+    if (!token) {
+      const response: ApiResponse = {
+        success: false,
+        message: 'Access token is required',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(401).json(response);
+      return;
+    }
+
+    // Verify JWT token
+    const payload = await JWTService.verifyToken(token);
+
+    // Use fast resolver for video uploads
+    const { firebaseUser, databaseUserId } = await resolveFirebaseUserFast(
+      payload.uid, 
+      'video upload authentication'
+    );
+
+    // Create user object using Firebase UID for JWT consistency
+    const user = createStandardUserObject(firebaseUser, payload.type, firebaseUser.uid);
+
+    // Add user to request
+    req.user = user;
+    req.firebaseUser = firebaseUser;
+
+    next();
+  } catch (error) {
+    Logger.authError('Fast JWT Authentication error', { error: error instanceof Error ? error.message : 'Unknown error' });
+    
+    const response: ApiResponse = {
+      success: false,
+      message: error instanceof Error ? error.message : 'Authentication failed',
+      timestamp: new Date().toISOString(),
+    };
+    
+    res.status(401).json(response);
+    return;
+  }
+};
 
 /**
  * Rate limiting per user
