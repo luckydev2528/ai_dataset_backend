@@ -488,3 +488,50 @@ export const resolveFirebaseUserWithFallback = async (
 
   return { firebaseUser, databaseUserId };
 };
+
+/**
+ * Fast authentication resolver for video uploads
+ * Only does Firebase lookup to avoid database timeouts
+ */
+export const resolveFirebaseUserFast = async (
+  uid: string, 
+  context: string = 'video upload'
+): Promise<{ firebaseUser: any; databaseUserId: string }> => {
+  try {
+    // Try Firebase lookup with a short timeout to avoid long stalls
+    const lookup = FirebaseWrapper.getUserByUid(uid);
+    const timeoutMs = parseInt(process.env.AUTH_FAST_LOOKUP_TIMEOUT_MS || '1500', 10);
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('FAST_LOOKUP_TIMEOUT')), timeoutMs));
+    const firebaseUser = await Promise.race([lookup, timeout]) as any;
+    
+    Logger.info(`AUTH: Fast Firebase user lookup successful during ${context}`, { 
+      uid,
+      context 
+    });
+    
+    return { firebaseUser, databaseUserId: uid };
+    
+  } catch (error: any) {
+    const errMsg = error?.message === 'FAST_LOOKUP_TIMEOUT' ? 'timeout' : (error?.message || 'unknown');
+    Logger.warning(`AUTH: Fast Firebase user lookup failed during ${context}, creating fallback`, { 
+      uid,
+      error: errMsg,
+      context 
+    });
+    
+    // Create fallback user for video uploads
+    const firebaseUser = {
+      uid,
+      email: '',
+      displayName: 'User',
+      photoURL: undefined,
+      disabled: false,
+      metadata: {
+        creationTime: new Date().toISOString(),
+        lastSignInTime: new Date().toISOString(),
+      }
+    };
+    
+    return { firebaseUser, databaseUserId: uid };
+  }
+};

@@ -1,38 +1,24 @@
-import { Request, Response } from 'express';
 export declare enum LogLevel {
+    SUCCESS = "success",
+    WARNING = "warning",
     ERROR = "error",
-    WARN = "warn",
-    INFO = "info",
-    DEBUG = "debug"
+    INFO = "info"
 }
-export interface LogEntry {
-    level: LogLevel;
-    message: string;
-    timestamp: string;
-    requestId?: string;
-    userId?: string;
-    ip?: string;
-    userAgent?: string;
-    url?: string;
-    method?: string;
-    statusCode?: number;
-    responseTime?: number;
-    error?: any;
-    metadata?: Record<string, any>;
+export declare class Logger {
+    private static formatMessage;
+    private static getEmoji;
+    private static getPrefix;
+    static success(message: string, data?: any): void;
+    static warning(message: string, data?: any): void;
+    static error(message: string, data?: any): void;
+    static info(message: string, data?: any): void;
+    static authSuccess(message: string, data?: any): void;
+    static authError(message: string, data?: any): void;
+    static dbSuccess(message: string, data?: any): void;
+    static dbError(message: string, data?: any): void;
+    static dbWarning(message: string, data?: any): void;
+    static firebaseSuccess(message: string, data?: any): void;
+    static firebaseError(message: string, data?: any): void;
+    static firebaseWarning(message: string, data?: any): void;
 }
-declare class Logger {
-    private isDevelopment;
-    private formatLog;
-    private log;
-    error(message: string, metadata?: Record<string, any>): void;
-    warn(message: string, metadata?: Record<string, any>): void;
-    info(message: string, metadata?: Record<string, any>): void;
-    debug(message: string, metadata?: Record<string, any>): void;
-    logRequest(req: Request, res: Response, responseTime: number): void;
-    logError(error: Error, req?: Request, metadata?: Record<string, any>): void;
-    logSecurity(event: string, req: Request, metadata?: Record<string, any>): void;
-    logPerformance(operation: string, duration: number, metadata?: Record<string, any>): void;
-}
-export declare const logger: Logger;
-export default logger;
 //# sourceMappingURL=logger.d.ts.map

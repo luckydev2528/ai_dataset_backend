@@ -13,6 +13,7 @@ import { securityLogger } from './middleware/security/securityLogger';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import databaseRoutes from './routes/database';
+import videoRoutes from './routes/video';
 import { initializeFirebaseAdmin } from './services/auth/firebaseAdmin';
 import { redisService } from './services/cache/RedisService';
 import CacheService from './services/cache/CacheService';
@@ -141,9 +142,14 @@ app.use(cors({
 app.use(generalRateLimit);
 app.use('/api/auth', authRateLimit);
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsing middleware with extended limits for video uploads
+app.use(express.json({ 
+  limit: '10mb'
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb'
+}));
 
 // Compression middleware
 app.use(compression());
@@ -211,6 +217,7 @@ app.get('/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/database', databaseRoutes);
+app.use('/api/video', videoRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -218,12 +225,13 @@ app.get('/', (req, res) => {
     message: 'Data Refining React Native App Backend API',
     version: '1.0.0',
     status: 'running',
-    endpoints: {
-      health: '/health',
-      auth: '/api/auth',
-      user: '/api/user',
-      database: '/api/database',
-    },
+      endpoints: {
+        health: '/health',
+        auth: '/api/auth',
+        user: '/api/user',
+        database: '/api/database',
+        video: '/api/video',
+      },
   });
 });
 
@@ -237,14 +245,19 @@ async function startServer() {
     // Initialize services first
     await initializeServices();
     
-    // Start the HTTP server
-    app.listen(PORT, () => {
+    // Start the HTTP server with extended timeouts for video uploads
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 Environment: ${process.env.NODE_ENV}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
       console.log(`📋 API Documentation: http://localhost:${PORT}/`);
       console.log(`🔴 Redis: ${redisService.isReady() ? 'Connected' : 'Disconnected'}`);
     });
+
+    // Configure server timeouts for video uploads
+    server.timeout = 300000; // 5 minutes timeout
+    server.keepAliveTimeout = 65000; // 65 seconds
+    server.headersTimeout = 66000; // 66 seconds
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
