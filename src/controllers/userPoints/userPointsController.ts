@@ -3,6 +3,7 @@ import { UserPointsModel, AddPointsData, SpendPointsData } from '../../services/
 import { ApiResponse } from '../../utils/response';
 import { Logger } from '../../utils/logger';
 import { transformUserPointsDocument } from '../../utils/userPointsTransform';
+import CacheService from '../../services/cache/CacheService';
 
 class UserPointsController {
   /**
@@ -76,12 +77,22 @@ class UserPointsController {
       }
 
       console.log('🔍 Getting user points for userId:', userId);
-      const userPoints = await UserPointsModel.getUserPoints(userId);
-      console.log('📊 User points retrieved:', userPoints);
+      const cacheKey = `user_points:${userId}`;
+      let userPoints = await CacheService.cacheWithRefresh(
+        cacheKey,
+        async () => {
+          const doc = await UserPointsModel.getUserPoints(userId);
+          return doc ? transformUserPointsDocument(doc) : null;
+        },
+        30,
+        0.8,
+      );
 
       if (!userPoints) {
         // Initialize user points if they don't exist
         const newUserPoints = await UserPointsModel.initializeUserPoints(userId);
+        // Cache initialized points
+        await CacheService.cacheWithRefresh(cacheKey, async () => transformUserPointsDocument(newUserPoints), 30, 0.8);
         
         const response: ApiResponse = {
           success: true,
@@ -96,7 +107,7 @@ class UserPointsController {
       const response: ApiResponse = {
         success: true,
         message: 'User points retrieved successfully',
-        data: { userPoints: transformUserPointsDocument(userPoints) },
+        data: { userPoints },
         timestamp: new Date().toISOString(),
       };
 

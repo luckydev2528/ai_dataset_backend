@@ -3,6 +3,7 @@ import { TaskModel, CreateTaskData, UpdateTaskData, TaskFilters } from '../../se
 import { ApiResponse } from '../../utils/response';
 import { Logger } from '../../utils/logger';
 import { transformTaskDocuments, transformTaskDocument } from '../../utils/taskTransform';
+import CacheService from '../../services/cache/CacheService';
 
 class TaskController {
   /**
@@ -69,12 +70,22 @@ class TaskController {
    */
   static async getActiveTasks(req: Request, res: Response): Promise<void> {
     try {
-      const tasks = await TaskModel.getActiveTasks();
+      const cacheKey = 'cache:api:task_active';
+
+      const tasks = await CacheService.cacheWithRefresh(
+        cacheKey,
+        async () => {
+          const docs = await TaskModel.getActiveTasks();
+          return transformTaskDocuments(docs);
+        },
+        60, // 60s TTL
+        0.8,
+      );
 
       const response: ApiResponse = {
         success: true,
         message: 'Active tasks retrieved successfully',
-        data: { tasks: transformTaskDocuments(tasks) },
+        data: { tasks },
         timestamp: new Date().toISOString(),
       };
 
