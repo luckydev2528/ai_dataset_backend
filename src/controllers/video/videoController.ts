@@ -13,7 +13,7 @@ const upload = multer({
     parts: 1000,
     files: 1,
   },
-  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback): void => {
+  fileFilter: (req: Request, file: any, cb: FileFilterCallback): void => {
     if (file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
@@ -81,7 +81,7 @@ export class VideoController {
       }
 
       // Get the uploaded file
-      const file = req.file as Express.Multer.File | undefined;
+      const file = (req as any).file as any;
       if (!file) {
         Logger.warning('🚫 Video upload failed: No file provided', { userId });
         res.status(400).json({
