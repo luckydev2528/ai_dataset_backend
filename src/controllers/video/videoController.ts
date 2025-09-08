@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import multer from 'multer';
+import multer, { FileFilterCallback } from 'multer';
 import { videoStorageService, VideoUploadOptions } from '../../services/storage/VideoStorageService';
 import { Logger } from '../../utils/logger';
 import { authenticateJWT } from '../../middleware/auth/auth';
@@ -8,20 +8,18 @@ import { authenticateJWT } from '../../middleware/auth/auth';
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
-    fieldSize: 10 * 1024 * 1024, // 10MB for form fields
-    parts: 1000, // Maximum number of parts
-    files: 1, // Only allow 1 file
+    fileSize: 100 * 1024 * 1024,
+    fieldSize: 10 * 1024 * 1024,
+    parts: 1000,
+    files: 1,
   },
-  fileFilter: (req, file, cb) => {
-    // Only allow video files
+  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback): void => {
     if (file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
       cb(new Error('Only video files are allowed'));
     }
-  },
-  // Note: onError is not a standard multer option, removing it
+  }
 });
 
 export class VideoController {
@@ -83,7 +81,7 @@ export class VideoController {
       }
 
       // Get the uploaded file
-      const file = req.file;
+      const file = req.file as Express.Multer.File | undefined;
       if (!file) {
         Logger.warning('🚫 Video upload failed: No file provided', { userId });
         res.status(400).json({
