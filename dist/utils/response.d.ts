@@ -1,4 +1,6 @@
 import { Response } from 'express';
+import { ApiResponse } from '../types';
+export { ApiResponse };
 export declare const sendSuccess: (res: Response, data?: any, message?: string, statusCode?: number) => void;
 export declare const sendError: (res: Response, message?: string, statusCode?: number, error?: string) => void;
 export declare const sendValidationError: (res: Response, errors: any[], message?: string) => void;

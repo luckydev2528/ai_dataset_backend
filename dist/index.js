@@ -10,14 +10,15 @@ const morgan_1 = __importDefault(require("morgan"));
 const compression_1 = __importDefault(require("compression"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const crypto_1 = __importDefault(require("crypto"));
-const errorHandler_1 = require("./middleware/error/errorHandler");
-const notFoundHandler_1 = require("./middleware/error/notFoundHandler");
+const error_1 = require("./middleware/error");
 const redisRateLimit_1 = require("./middleware/rateLimit/redisRateLimit");
 const securityLogger_1 = require("./middleware/security/securityLogger");
 const auth_1 = __importDefault(require("./routes/auth"));
 const user_1 = __importDefault(require("./routes/user"));
 const database_1 = __importDefault(require("./routes/database"));
 const video_1 = __importDefault(require("./routes/video"));
+const task_1 = __importDefault(require("./routes/task"));
+const userPoints_1 = __importDefault(require("./routes/userPoints"));
 const firebaseAdmin_1 = require("./services/auth/firebaseAdmin");
 const RedisService_1 = require("./services/cache/RedisService");
 const CacheService_1 = __importDefault(require("./services/cache/CacheService"));
@@ -49,7 +50,7 @@ function validateEnvironment() {
 }
 validateEnvironment();
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
 async function initializeServices() {
     try {
         const firebaseApp = (0, firebaseAdmin_1.initializeFirebaseAdmin)();
@@ -109,15 +110,25 @@ app.use((0, helmet_1.default)({
     dnsPrefetchControl: { allow: false },
 }));
 app.use((0, cors_1.default)({
-    origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000', 'http://localhost:8081'],
+    origin: process.env.CORS_ORIGIN?.split(',') || [
+        'http://localhost:3000',
+        'http://localhost:8081',
+        'http://192.168.1.19:3000',
+        'http://192.168.1.19:8081'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 app.use(redisRateLimit_1.generalRateLimit);
 app.use('/api/auth', redisRateLimit_1.authRateLimit);
-app.use(express_1.default.json({ limit: '10mb' }));
-app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express_1.default.json({
+    limit: '10mb'
+}));
+app.use(express_1.default.urlencoded({
+    extended: true,
+    limit: '10mb'
+}));
 app.use((0, compression_1.default)());
 app.use((0, morgan_1.default)(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(securityLogger_1.securityLogger);
@@ -170,6 +181,8 @@ app.use('/api/auth', auth_1.default);
 app.use('/api/user', user_1.default);
 app.use('/api/database', database_1.default);
 app.use('/api/video', video_1.default);
+app.use('/api/task', task_1.default);
+app.use('/api/user-points', userPoints_1.default);
 app.get('/', (req, res) => {
     res.json({
         message: 'Data Refining React Native App Backend API',
@@ -181,21 +194,27 @@ app.get('/', (req, res) => {
             user: '/api/user',
             database: '/api/database',
             video: '/api/video',
+            task: '/api/task',
+            userPoints: '/api/user-points',
         },
     });
 });
-app.use(notFoundHandler_1.notFoundHandler);
-app.use(errorHandler_1.errorHandler);
+app.use(error_1.notFoundHandler);
+app.use(error_1.errorHandler);
 async function startServer() {
     try {
         await initializeServices();
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Server running on port ${PORT}`);
             console.log(`📱 Environment: ${process.env.NODE_ENV}`);
             console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+            console.log(`🔗 Mobile access: http://192.168.1.19:${PORT}/health`);
             console.log(`📋 API Documentation: http://localhost:${PORT}/`);
             console.log(`🔴 Redis: ${RedisService_1.redisService.isReady() ? 'Connected' : 'Disconnected'}`);
         });
+        server.timeout = 300000;
+        server.keepAliveTimeout = 65000;
+        server.headersTimeout = 66000;
     }
     catch (error) {
         console.error('❌ Failed to start server:', error);
