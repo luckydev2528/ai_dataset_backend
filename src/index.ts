@@ -6,6 +6,8 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 
+import { errorHandler, notFoundHandler } from './middleware/error';
+
 
 import { generalRateLimit, authRateLimit } from './middleware/rateLimit/redisRateLimit';
 import { securityLogger } from './middleware/security/securityLogger';
@@ -244,6 +246,10 @@ app.get('/', (req, res) => {
     },
   });
 });
+
+// Fallback handlers (404 then error handler)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Start HTTP server with extended timeouts for video uploads
 async function startServer() {
