@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 node_modules/
 
 # Environment files
@@ -66,3 +67,6 @@ build/
 .Trashes
 ehthumbs.db
 Thumbs.db
+=======
+node_modules
+>>>>>>> 98c8eaaf006879486f8615c2ed5ed3bf254de88e
