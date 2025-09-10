@@ -18,6 +18,7 @@ import databaseRoutes from './routes/database';
 import videoRoutes from './routes/video';
 import taskRoutes from './routes/task';
 import userPointsRoutes from './routes/userPoints';
+import validatorRoutes from './routes/validator';
 import { initializeFirebaseAdmin } from './services/auth/firebaseAdmin';
 import { redisService } from './services/cache/RedisService';
 import CacheService from './services/cache/CacheService';
@@ -229,6 +230,7 @@ app.use('/api/database', databaseRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/task', taskRoutes);
 app.use('/api/user-points', userPointsRoutes);
+app.use('/api/validator', validatorRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

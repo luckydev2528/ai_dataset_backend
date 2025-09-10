@@ -14,6 +14,7 @@ export interface FirestoreCollection {
   tasks: 'tasks';
   user_points: 'user_points';
   points_history: 'points_history';
+  video_submissions: 'video_submissions';
 }
 
 export type CollectionName = keyof FirestoreCollection;

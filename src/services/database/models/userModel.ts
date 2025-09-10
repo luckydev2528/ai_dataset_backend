@@ -6,7 +6,7 @@ export interface UserDocument {
   email: string;
   displayName?: string;
   photoURL?: string;
-  type: 'user' | 'admin' | 'moderator';
+  type: 'user' | 'admin' | 'moderator' | 'validator';
   isActive: boolean;
   lastLoginAt?: Date;
   createdAt: Date;

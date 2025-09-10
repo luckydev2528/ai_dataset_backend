@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import multer from 'multer';
 import { videoStorageService, VideoUploadOptions } from '../../services/storage/VideoStorageService';
+import { VideoSubmissionModel } from '../../services/database/models/videoSubmissionModel';
 import { Logger } from '../../utils/logger';
 import { authenticateJWT } from '../../middleware/auth/auth';
 
@@ -128,6 +129,36 @@ export class VideoController {
       });
 
       if (result.success) {
+        // Create video submission for validation
+        try {
+          await VideoSubmissionModel.create({
+            videoId: result.videoId,
+            taskId,
+            userId,
+            challengePrompt,
+            videoMetadata: {
+              duration: parseInt(duration),
+              width: parseInt(width),
+              height: parseInt(height),
+              fileSize: parseInt(fileSize),
+              resolution,
+              frameRate: parseInt(frameRate),
+              quality
+            },
+            downloadUrl: result.downloadUrl,
+            ...(result.thumbnailUrl && { thumbnailUrl: result.thumbnailUrl })
+          });
+          
+          Logger.info('📄 Video submission created for validation', { 
+            videoId: result.videoId, 
+            taskId, 
+            userId 
+          });
+        } catch (submissionError) {
+          Logger.error('Failed to create video submission:', submissionError);
+          // Continue with upload success even if submission creation fails
+        }
+
         res.status(200).json({
           success: true,
           data: {
