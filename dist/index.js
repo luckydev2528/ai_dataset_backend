@@ -19,6 +19,8 @@ const database_1 = __importDefault(require("./routes/database"));
 const video_1 = __importDefault(require("./routes/video"));
 const task_1 = __importDefault(require("./routes/task"));
 const userPoints_1 = __importDefault(require("./routes/userPoints"));
+const challenges_1 = __importDefault(require("./routes/challenges"));
+const submissions_1 = __importDefault(require("./routes/submissions"));
 const firebaseAdmin_1 = require("./services/auth/firebaseAdmin");
 const RedisService_1 = require("./services/cache/RedisService");
 const CacheService_1 = __importDefault(require("./services/cache/CacheService"));
@@ -183,6 +185,8 @@ app.use('/api/database', database_1.default);
 app.use('/api/video', video_1.default);
 app.use('/api/task', task_1.default);
 app.use('/api/user-points', userPoints_1.default);
+app.use('/api/challenges', challenges_1.default);
+app.use('/api/submissions', submissions_1.default);
 app.get('/', (req, res) => {
     res.json({
         message: 'Data Refining React Native App Backend API',
@@ -196,6 +200,8 @@ app.get('/', (req, res) => {
             video: '/api/video',
             task: '/api/task',
             userPoints: '/api/user-points',
+            challenges: '/api/challenges',
+            submissions: '/api/submissions',
         },
     });
 });

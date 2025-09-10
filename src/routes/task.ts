@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getTasks,
   getActiveTasks,
+  getCategorizedTasks,
   getTaskById,
   createTask,
   updateTask,
@@ -28,6 +29,13 @@ router.get('/', getTasks);
  * @access  Public
  */
 router.get('/active', getActiveTasks);
+
+/**
+ * @route   GET /api/task/categorized
+ * @desc    Get categorized tasks for user (Available/Pending/Completed)
+ * @access  Private
+ */
+router.get('/categorized', authenticateJWT, requireAuth, getCategorizedTasks);
 
 /**
  * @route   GET /api/task/stats

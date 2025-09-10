@@ -8,7 +8,7 @@ export interface TaskResponse {
   expiryDate: string; // ISO date string
   category: string;
   difficulty: 'easy' | 'medium' | 'hard';
-  status: 'active' | 'completed' | 'expired';
+  status: 'active' | 'pending' | 'completed' | 'expired';
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
 }

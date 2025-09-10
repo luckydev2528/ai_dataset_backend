@@ -18,6 +18,8 @@ import databaseRoutes from './routes/database';
 import videoRoutes from './routes/video';
 import taskRoutes from './routes/task';
 import userPointsRoutes from './routes/userPoints';
+import challengeRoutes from './routes/challenges';
+import submissionRoutes from './routes/submissions';
 import { initializeFirebaseAdmin } from './services/auth/firebaseAdmin';
 import { redisService } from './services/cache/RedisService';
 import CacheService from './services/cache/CacheService';
@@ -229,6 +231,8 @@ app.use('/api/database', databaseRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/task', taskRoutes);
 app.use('/api/user-points', userPointsRoutes);
+app.use('/api/challenges', challengeRoutes);
+app.use('/api/submissions', submissionRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -244,6 +248,8 @@ app.get('/', (req, res) => {
       video: '/api/video',
       task: '/api/task',
       userPoints: '/api/user-points',
+      challenges: '/api/challenges',
+      submissions: '/api/submissions',
     },
   });
 });

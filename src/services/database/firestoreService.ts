@@ -14,6 +14,8 @@ export interface FirestoreCollection {
   tasks: 'tasks';
   user_points: 'user_points';
   points_history: 'points_history';
+  challenges: 'challenges';
+  task_submissions: 'task_submissions';
 }
 
 export type CollectionName = keyof FirestoreCollection;
