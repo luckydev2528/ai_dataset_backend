@@ -127,6 +127,14 @@ export class ValidatorController {
         return;
       }
 
+      if (!submissionId) {
+        res.status(400).json({
+          success: false,
+          error: 'Submission ID is required'
+        });
+        return;
+      }
+
       // Verify user is a validator
       const user = await UserModel.getByUid(validatorId);
       if (!user || user.type !== 'validator') {
@@ -194,6 +202,14 @@ export class ValidatorController {
         res.status(401).json({
           success: false,
           error: 'Authentication required'
+        });
+        return;
+      }
+
+      if (!submissionId) {
+        res.status(400).json({
+          success: false,
+          error: 'Submission ID is required'
         });
         return;
       }
@@ -270,6 +286,14 @@ export class ValidatorController {
         res.status(401).json({
           success: false,
           error: 'Authentication required'
+        });
+        return;
+      }
+
+      if (!submissionId) {
+        res.status(400).json({
+          success: false,
+          error: 'Submission ID is required'
         });
         return;
       }
