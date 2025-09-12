@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { AuthenticatedRequest, ApiResponse, UpdateUserData } from '../../types';
 import { FirebaseWrapper } from '../../services/firebase/firebaseWrapper';
+import { firestoreService } from '../../services/database/firestoreService';
+import { UserModel } from '../../services/database/models/userModel';
 import { asyncHandler, AppError } from '../../middleware/error';
 import { requireAuth } from '../../middleware/auth/authHelpers';
 import { createStandardUserObject } from '../../utils/userUtils';
@@ -194,4 +196,42 @@ export const exportUserData = asyncHandler(async (req: AuthenticatedRequest, res
     userData
   );
   res.status(statusCode).json(response);
+});
+
+/**
+ * Update user FCM token
+ */
+export const updateFCMToken = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  requireAuth(req, res, () => {});
+
+  const { fcmToken } = req.body;
+
+  if (!fcmToken) {
+    const { response, statusCode } = createValidationErrorResponse(
+      'FCM token is required'
+    );
+    res.status(statusCode).json(response);
+    return;
+  }
+
+  try {
+    // Users collection is keyed by database ID; update by Firebase UID for consistency
+    const updated = await UserModel.updateByUid(req.user!.id, { fcmToken } as any);
+    if (!updated) {
+      throw new Error('User not found for provided Firebase UID');
+    }
+
+    const { response, statusCode } = createSuccessResponse(
+      'FCM token updated successfully',
+      { fcmToken: fcmToken.substring(0, 20) + '...' }
+    );
+    res.status(statusCode).json(response);
+  } catch (error) {
+    Logger.error('Error updating FCM token:', error);
+    const { response, statusCode } = createErrorResponse(
+      'Failed to update FCM token',
+      error instanceof Error ? error.message : 'Unknown error'
+    );
+    res.status(statusCode).json(response);
+  }
 });

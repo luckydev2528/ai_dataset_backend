@@ -256,6 +256,88 @@ export class UserPointsModel {
   }
 
   /**
+   * Get approved submissions history for a user
+   */
+  static async getApprovedSubmissionsHistory(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<PointsTransaction[]> {
+    try {
+      // Get approved task submissions for the user
+      const submissions = await firestoreService.query<any>('task_submissions', (query) => 
+        query
+          .where('userId', '==', userId)
+          .where('status', '==', 'approved')
+          .limit(limit)
+          .offset(offset)
+      );
+
+      console.log('🔍 UserPointsModel - Raw submissions found:', submissions.length);
+      console.log('🔍 UserPointsModel - Raw submissions:', JSON.stringify(submissions, null, 2));
+
+      // Sort submissions by reviewedAt date (most recent first)
+      const sortedSubmissions = submissions.sort((a, b) => {
+        const dateA = a.reviewedAt?.toDate() || a.submittedAt.toDate();
+        const dateB = b.reviewedAt?.toDate() || b.submittedAt.toDate();
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      // Get task details for each submission
+      const transactions: PointsTransaction[] = [];
+      
+      for (const submission of sortedSubmissions) {
+        try {
+          // Get task details
+          const task = await firestoreService.get('tasks', submission.taskId);
+          console.log(`🔍 UserPointsModel - Task for submission ${submission.id}:`, task);
+          
+          if (task) {
+            const transaction: PointsTransaction = {
+              id: submission.id,
+              type: 'earned',
+              amount: task.bountyPoints || 0,
+              description: `Completed task: "${task.title}"`,
+              taskId: submission.taskId,
+              timestamp: submission.reviewedAt?.toDate() || submission.submittedAt.toDate(),
+              metadata: {
+                category: task.category || 'general',
+                difficulty: task.difficulty || 'easy',
+                multiplier: 1.0,
+                reason: 'task_completion',
+              },
+            };
+            transactions.push(transaction);
+          }
+        } catch (error) {
+          console.error(`Error getting task details for submission ${submission.id}:`, error);
+          // Still add the transaction even if task details are missing
+          const transaction: PointsTransaction = {
+            id: submission.id,
+            type: 'earned',
+            amount: 0, // Unknown amount if task not found
+            description: `Completed task: ${submission.taskId}`,
+            taskId: submission.taskId,
+            timestamp: submission.reviewedAt?.toDate() || submission.submittedAt.toDate(),
+            metadata: {
+              category: 'unknown',
+              difficulty: 'unknown',
+              multiplier: 1.0,
+              reason: 'task_completion',
+            },
+          };
+          transactions.push(transaction);
+        }
+      }
+
+      return transactions;
+    } catch (error) {
+      console.error('Error getting approved submissions history:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get points statistics
    */
   static async getPointsStats(): Promise<UserPointsStats> {

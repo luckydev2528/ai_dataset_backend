@@ -9,6 +9,7 @@ import {
   getUserStats,
   searchUsers,
   exportUserData,
+  updateFCMToken,
 } from '../controllers/user/userController';
 import {
   validateUserUpdate,
@@ -81,5 +82,12 @@ router.get('/search', authenticateJWT, requireAuth, requireRole(['admin']), sear
  * @access  Private
  */
 router.get('/export/data', authenticateJWT, requireAuth, exportUserData);
+
+/**
+ * @route   PUT /api/user/fcm-token
+ * @desc    Update user FCM token for push notifications
+ * @access  Private
+ */
+router.put('/fcm-token', authenticateJWT, requireAuth, updateFCMToken);
 
 export default router;

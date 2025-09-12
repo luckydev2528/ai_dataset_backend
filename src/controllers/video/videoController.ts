@@ -601,19 +601,19 @@ export class VideoController {
         return;
       }
 
-      // Check rate limiting (2 views per hour per video per user)
+      // Check rate limiting (4 views per 5 minutes per video per user)
       const rateLimitKey = `video_view:${userId}:${videoId}`;
       const currentViews = await redisService.get(rateLimitKey);
       const viewCount = currentViews ? parseInt(currentViews) : 0;
 
       if (viewCount >= 2) {
-        // Calculate reset time (1 hour from first view)
+        // Calculate reset time (5 minutes from first view)
         const firstViewTime = await redisService.get(`${rateLimitKey}:first_view`);
-        const resetTime = firstViewTime ? new Date(parseInt(firstViewTime) + 3600000) : new Date(Date.now() + 3600000);
+        const resetTime = firstViewTime ? new Date(parseInt(firstViewTime) + 300000) : new Date(Date.now() + 300000);
         
         res.status(429).json({
           success: false,
-          error: 'You can only view this video twice per hour. Please try again later.',
+          error: 'You can only view this video four times per 5 minutes. Please try again later.',
           remainingViews: 0,
           resetTime: resetTime.toISOString()
         });
@@ -653,18 +653,18 @@ export class VideoController {
       Logger.info('🎬 Returning video URL', { 
         videoId, 
         videoUrl: videoData.downloadUrl,
-        remainingViews: 1 - viewCount 
+        remainingViews: Math.max(0, 4 - viewCount) 
       });
 
       // Increment view count
       const now = Date.now();
       if (viewCount === 0) {
-        // First view - set both count and first view time
-        await redisService.set(rateLimitKey, '1', 3600); // 1 hour expiry
-        await redisService.set(`${rateLimitKey}:first_view`, now.toString(), 3600);
+        // First view - set both count and first view time (5 minutes window)
+        await redisService.set(rateLimitKey, '1', 300); // 300s = 5 minutes
+        await redisService.set(`${rateLimitKey}:first_view`, now.toString(), 300);
       } else {
-        // Increment existing count
-        await redisService.set(rateLimitKey, (viewCount + 1).toString(), 3600);
+        // Increment existing count, keep same 5 minute TTL
+        await redisService.set(rateLimitKey, (viewCount + 1).toString(), 300);
       }
 
       // Log the view
@@ -673,15 +673,15 @@ export class VideoController {
         videoId, 
         taskId, 
         viewCount: viewCount + 1,
-        remainingViews: 1 - viewCount
+        remainingViews: Math.max(0, 4 - viewCount)
       });
 
       res.status(200).json({
         success: true,
         data: {
           videoUrl: videoData.downloadUrl,
-          remainingViews: 1 - viewCount,
-          resetTime: new Date(now + 3600000).toISOString()
+          remainingViews: Math.max(0, 4 - viewCount),
+          resetTime: new Date(now + 300000).toISOString()
         }
       });
 
@@ -737,11 +737,11 @@ export class VideoController {
       const firstViewTime = await redisService.get(`${rateLimitKey}:first_view`);
       
       const viewCount = currentViews ? parseInt(currentViews) : 0;
-      const remainingViews = Math.max(0, 2 - viewCount);
+      const remainingViews = Math.max(0, 4 - viewCount);
       
-      let resetTime = new Date(Date.now() + 3600000); // Default to 1 hour from now
+      let resetTime = new Date(Date.now() + 300000); // Default to 5 minutes from now
       if (firstViewTime) {
-        resetTime = new Date(parseInt(firstViewTime) + 3600000);
+        resetTime = new Date(parseInt(firstViewTime) + 300000);
       }
 
       res.status(200).json({

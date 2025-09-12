@@ -393,6 +393,57 @@ class UserPointsController {
   }
 
   /**
+   * Get current user's points history from approved task submissions
+   */
+  static async getMyPointsHistory(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user?.id;
+      const { limit = '50', offset = '0' } = req.query;
+
+      if (!userId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'User authentication required',
+          error: 'AUTHENTICATION_REQUIRED',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      // Get approved task submissions for the user
+      const approvedSubmissions = await UserPointsModel.getApprovedSubmissionsHistory(
+        userId,
+        parseInt(limit as string),
+        parseInt(offset as string)
+      );
+
+      console.log('🔍 Backend - Approved submissions found:', approvedSubmissions.length);
+      console.log('🔍 Backend - Submissions data:', JSON.stringify(approvedSubmissions, null, 2));
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Points history retrieved successfully',
+        data: { transactions: approvedSubmissions },
+        timestamp: new Date().toISOString(),
+      };
+
+      res.status(200).json(response);
+    } catch (error) {
+      Logger.error('Error getting my points history:', { error: error instanceof Error ? error.message : String(error) });
+
+      const response: ApiResponse = {
+        success: false,
+        message: 'Failed to retrieve points history',
+        error: 'POINTS_HISTORY_ERROR',
+        timestamp: new Date().toISOString(),
+      };
+
+      res.status(500).json(response);
+    }
+  }
+
+  /**
    * Get points leaderboard
    */
   static async getLeaderboard(req: Request, res: Response): Promise<void> {
@@ -554,6 +605,7 @@ export const addPoints = UserPointsController.addPoints;
 export const spendPoints = UserPointsController.spendPoints;
 export const awardTaskPoints = UserPointsController.awardTaskPoints;
 export const getPointsHistory = UserPointsController.getPointsHistory;
+export const getMyPointsHistory = UserPointsController.getMyPointsHistory;
 export const getLeaderboard = UserPointsController.getLeaderboard;
 export const getPointsStats = UserPointsController.getPointsStats;
 export const initializeUserPoints = UserPointsController.initializeUserPoints;

@@ -351,6 +351,29 @@ export class FirestoreService {
   }
 
   /**
+   * Get all documents from a collection
+   */
+  public async getCollection<T = any>(collectionName: CollectionName): Promise<T[]> {
+    try {
+      const snapshot = await this.collection(collectionName).get();
+      const documents: T[] = [];
+      
+      snapshot.forEach(doc => {
+        documents.push({
+          id: doc.id,
+          ...doc.data()
+        } as T);
+      });
+      
+      Logger.info(`Retrieved ${documents.length} documents from ${collectionName}`);
+      return documents;
+    } catch (error) {
+      Logger.error(`Error getting collection ${collectionName}:`, error as Record<string, any>);
+      throw error;
+    }
+  }
+
+  /**
    * Health check for Firestore connection
    */
   public async healthCheck(): Promise<{ status: string; latency: number }> {

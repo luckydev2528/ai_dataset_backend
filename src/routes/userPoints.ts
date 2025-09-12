@@ -6,6 +6,7 @@ import {
   spendPoints,
   awardTaskPoints,
   getPointsHistory,
+  getMyPointsHistory,
   getLeaderboard,
   getPointsStats,
   initializeUserPoints,
@@ -22,6 +23,13 @@ const router = Router();
  * @access  Private
  */
 router.get('/my', authenticateJWT, requireAuth, getMyPoints);
+
+/**
+ * @route   GET /api/user-points/history
+ * @desc    Get current user's points history
+ * @access  Private
+ */
+router.get('/history', authenticateJWT, requireAuth, getMyPointsHistory);
 
 /**
  * @route   GET /api/user-points/leaderboard

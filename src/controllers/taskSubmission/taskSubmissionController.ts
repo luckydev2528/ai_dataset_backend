@@ -290,10 +290,10 @@ export class TaskSubmissionController extends BaseController {
         return;
       }
 
-      // Mark the task as completed
-      await TaskModel.completeTask(submission.taskId, adminId);
+      // Mark the task as completed (this now automatically awards points)
+      const updatedTask = await TaskModel.completeTask(submission.taskId, adminId);
 
-      Logger.info('✅ Submission approved and task completed', {
+      Logger.info('✅ Submission approved, task completed, points awarded (if task found)', {
         submissionId: id,
         taskId: submission.taskId,
         userId: submission.userId,

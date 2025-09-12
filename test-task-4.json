@@ -1,0 +1,28 @@
+{
+  "title": "Phase 3 Testing Task - Video Recording Challenge",
+  "description": "Test the new Phase 3 functionality by recording a 1-minute video demonstrating a simple daily activity. This task is specifically designed to test the task status handling, submission viewing, and recording capabilities implemented in Phase 3.",
+  "bountyPoints": 100,
+  "category": "Testing",
+  "difficulty": "easy",
+  "expiryDate": "2025-02-15T23:59:59Z",
+  "metadata": {
+    "tags": ["testing", "phase3", "video", "demo", "daily-activity"],
+    "requirements": [
+      "Video must be exactly 1 minute long",
+      "Demonstrate a simple daily activity (e.g., making coffee, organizing desk, morning routine)",
+      "Clear audio and good lighting",
+      "Show the activity from start to finish"
+    ],
+    "instructions": [
+      "Choose a simple daily activity you do regularly",
+      "Set up your camera in a good position",
+      "Record the activity from beginning to end",
+      "Keep the video exactly 1 minute",
+      "Ensure good lighting and clear audio"
+    ],
+    "estimatedTime": 15,
+    "maxParticipants": 20,
+    "currentParticipants": 0
+  }
+}
+

@@ -20,6 +20,8 @@ import taskRoutes from './routes/task';
 import userPointsRoutes from './routes/userPoints';
 import challengeRoutes from './routes/challenges';
 import submissionRoutes from './routes/submissions';
+import adminRoutes from './routes/admin';
+import notificationRoutes from './routes/notifications';
 import { initializeFirebaseAdmin } from './services/auth/firebaseAdmin';
 import { redisService } from './services/cache/RedisService';
 import CacheService from './services/cache/CacheService';
@@ -233,6 +235,8 @@ app.use('/api/task', taskRoutes);
 app.use('/api/user-points', userPointsRoutes);
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/submissions', submissionRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -250,6 +254,7 @@ app.get('/', (req, res) => {
       userPoints: '/api/user-points',
       challenges: '/api/challenges',
       submissions: '/api/submissions',
+      notifications: '/api/notifications',
     },
   });
 });

@@ -5,6 +5,8 @@ import { BaseController } from '../BaseController';
 import { Logger } from '../../utils/logger';
 import { transformTaskDocuments, transformTaskDocument } from '../../utils/taskTransform';
 import { ValidationUtils } from '../../utils/ValidationUtils';
+import { NotificationService } from '../../services/notifications/notificationService';
+import { firestoreService } from '../../services/database/firestoreService';
 
 class TaskController extends BaseController {
   /**
@@ -68,6 +70,33 @@ class TaskController extends BaseController {
 
       const task = await TaskModel.createTask(taskData);
       
+      // Send notification if task is created as 'active'
+      if (task.status === 'active') {
+        try {
+          const notificationService = NotificationService.getInstance();
+          // Get all users with FCM tokens
+          const users = await firestoreService.getCollection('users');
+          const tokens = users
+            .filter((user: any) => user.fcmToken)
+            .map((user: any) => user.fcmToken);
+          
+          if (tokens.length > 0) {
+            await notificationService.sendNewTaskNotification(
+              task.title,
+              task.id,
+              task.bountyPoints || 0,
+              tokens
+            );
+            Logger.info(`New task notification sent for task: ${task.id} to ${tokens.length} users`);
+          } else {
+            Logger.info('No users with FCM tokens found, skipping notification');
+          }
+        } catch (notificationError) {
+          Logger.error('Failed to send new task notification:', notificationError);
+          // Don't fail the task creation if notification fails
+        }
+      }
+      
       TaskController.sendSuccessResponse(res, { task: transformTaskDocument(task) }, 'Task created successfully', 201);
     } catch (error) {
       TaskController.handleError(error, 'create task', res);
@@ -87,11 +116,40 @@ class TaskController extends BaseController {
         return;
       }
 
+      // Get the task before updating to check if status is changing to 'active'
+      const oldTask = await TaskModel.getTaskById(id);
       const task = await TaskModel.updateTask(id, updateData);
       
       if (!task) {
         TaskController.sendNotFoundError(res, 'Task');
         return;
+      }
+
+      // Send notification if task status changed to 'active'
+      if (updateData.status === 'active' && oldTask?.status !== 'active') {
+        try {
+          const notificationService = NotificationService.getInstance();
+          // Get all users with FCM tokens
+          const users = await firestoreService.getCollection('users');
+          const tokens = users
+            .filter((user: any) => user.fcmToken)
+            .map((user: any) => user.fcmToken);
+          
+          if (tokens.length > 0) {
+            await notificationService.sendNewTaskNotification(
+              task.title,
+              task.id,
+              task.bountyPoints || 0,
+              tokens
+            );
+            Logger.info(`New task notification sent for task: ${task.id} to ${tokens.length} users`);
+          } else {
+            Logger.info('No users with FCM tokens found, skipping notification');
+          }
+        } catch (notificationError) {
+          Logger.error('Failed to send new task notification:', notificationError);
+          // Don't fail the task update if notification fails
+        }
       }
 
       TaskController.sendSuccessResponse(res, { task: transformTaskDocument(task) }, 'Task updated successfully');

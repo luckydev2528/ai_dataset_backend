@@ -1,0 +1,53 @@
+{
+  "bountyPoints": 300,
+  "category": "Technical",
+  "challengeId": "8aW9x9cU2zB9Hjf34Knk",
+  "completedAt": null,
+  "completedById": null,
+  "createdAt": "September 11, 2025 at 12:45:00 AM UTC",
+  "createdById": "admin",
+  "description": "Create a comprehensive technical tutorial explaining the process of setting up and configuring a CI/CD pipeline for software projects.",
+  "difficulty": "medium",
+  "expiryDate": "September 18, 2025 at 12:00:00 AM UTC",
+  "isActive": true,
+  "metadata": {
+    "currentParticipants": 0,
+    "estimatedTime": 120
+  },
+  "instructions": [
+    "Review existing CI/CD documentation",
+    "Test pipeline setup yourself",
+    "Create clear setup examples",
+    "Provide troubleshooting steps"
+  ],
+  "maxParticipants": 10,
+  "requirements": [
+    "Describe CI/CD pipeline stages",
+    "Include code samples",
+    "Explain integration with version control systems",
+    "Demonstrate automated testing integration"
+  ],
+  "tags": [
+    "documentation",
+    "technical",
+    "ci/cd",
+    "developers"
+  ],
+  "searchTerms": [
+    "technical",
+    "documentation",
+    "tutorial",
+    "CI/CD",
+    "pipeline",
+    "setup",
+    "configuration",
+    "automated testing",
+    "version control",
+    "developers"
+  ],
+  "status": "active",
+  "title": "CI/CD Pipeline Setup Tutorial"
+}
+
+
+

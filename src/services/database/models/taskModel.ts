@@ -1,5 +1,6 @@
 import { firestoreService } from '../firestoreService';
 import { BaseModel, BaseDocument, BaseCreateData, BaseUpdateData, BaseFilters } from '../BaseModel';
+import { awardPointsForCompletedTask } from '../../../utils/pointsAwarder';
 
 export interface TaskDocument extends BaseDocument {
   title: string;
@@ -161,10 +162,38 @@ export class TaskModel extends BaseModel<TaskDocument, CreateTaskData, UpdateTas
    * Complete task (admin approval)
    */
   static async completeTask(id: string, approvedBy: string): Promise<TaskDocument | null> {
-    return this.updateTask(id, {
+    // First get the task data to award points
+    const task = await this.getTaskById(id);
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    // Update the task status
+    const updatedTask = await this.updateTask(id, {
       status: 'completed',
       approvedBy,
+      completedBy: approvedBy,
+      completedAt: new Date(),
     });
+
+    // Automatically award points to the user
+    if (updatedTask && task.completedBy) {
+      try {
+        await awardPointsForCompletedTask(
+          id,
+          task.completedBy,
+          task.bountyPoints,
+          task.category,
+          task.difficulty,
+          approvedBy
+        );
+      } catch (error) {
+        console.error('Failed to award points for completed task:', error);
+        // Don't fail the task completion if points awarding fails
+      }
+    }
+
+    return updatedTask;
   }
 
   /**
