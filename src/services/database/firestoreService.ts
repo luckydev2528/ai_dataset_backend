@@ -14,8 +14,11 @@ export interface FirestoreCollection {
   tasks: 'tasks';
   user_points: 'user_points';
   points_history: 'points_history';
+<<<<<<< HEAD
   challenges: 'challenges';
   task_submissions: 'task_submissions';
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 }
 
 export type CollectionName = keyof FirestoreCollection;
@@ -351,6 +354,7 @@ export class FirestoreService {
   }
 
   /**
+<<<<<<< HEAD
    * Get all documents from a collection
    */
   public async getCollection<T = any>(collectionName: CollectionName): Promise<T[]> {
@@ -374,6 +378,8 @@ export class FirestoreService {
   }
 
   /**
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
    * Health check for Firestore connection
    */
   public async healthCheck(): Promise<{ status: string; latency: number }> {

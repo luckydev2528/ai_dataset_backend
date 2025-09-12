@@ -18,10 +18,13 @@ import databaseRoutes from './routes/database';
 import videoRoutes from './routes/video';
 import taskRoutes from './routes/task';
 import userPointsRoutes from './routes/userPoints';
+<<<<<<< HEAD
 import challengeRoutes from './routes/challenges';
 import submissionRoutes from './routes/submissions';
 import adminRoutes from './routes/admin';
 import notificationRoutes from './routes/notifications';
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 import { initializeFirebaseAdmin } from './services/auth/firebaseAdmin';
 import { redisService } from './services/cache/RedisService';
 import CacheService from './services/cache/CacheService';
@@ -233,10 +236,13 @@ app.use('/api/database', databaseRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/task', taskRoutes);
 app.use('/api/user-points', userPointsRoutes);
+<<<<<<< HEAD
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -252,9 +258,12 @@ app.get('/', (req, res) => {
       video: '/api/video',
       task: '/api/task',
       userPoints: '/api/user-points',
+<<<<<<< HEAD
       challenges: '/api/challenges',
       submissions: '/api/submissions',
       notifications: '/api/notifications',
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
     },
   });
 });

@@ -13,7 +13,11 @@ router.use(generalRateLimit);
  * @desc Upload a video file
  * @access Private
  */
+<<<<<<< HEAD
 router.post('/upload', authenticateJWT, uploadMiddleware, VideoController.uploadVideo);
+=======
+router.post('/upload', uploadMiddleware, authenticateJWT, VideoController.uploadVideo);
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 
 /**
  * @route GET /api/video/:videoId
@@ -50,6 +54,7 @@ router.delete('/:videoId', authenticateJWT, VideoController.deleteVideo);
  */
 router.get('/stats/:userId', authenticateJWT, VideoController.getUserStorageStats);
 
+<<<<<<< HEAD
 /**
  * @route POST /api/video/view
  * @desc Request to view a video with rate limiting
@@ -64,4 +69,6 @@ router.post('/view', authenticateJWT, VideoController.requestVideoView);
  */
 router.get('/view-stats/:videoId', authenticateJWT, VideoController.getVideoViewingStats);
 
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 export default router;

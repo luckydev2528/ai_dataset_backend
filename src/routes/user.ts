@@ -9,7 +9,10 @@ import {
   getUserStats,
   searchUsers,
   exportUserData,
+<<<<<<< HEAD
   updateFCMToken,
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 } from '../controllers/user/userController';
 import {
   validateUserUpdate,
@@ -83,6 +86,7 @@ router.get('/search', authenticateJWT, requireAuth, requireRole(['admin']), sear
  */
 router.get('/export/data', authenticateJWT, requireAuth, exportUserData);
 
+<<<<<<< HEAD
 /**
  * @route   PUT /api/user/fcm-token
  * @desc    Update user FCM token for push notifications
@@ -90,4 +94,6 @@ router.get('/export/data', authenticateJWT, requireAuth, exportUserData);
  */
 router.put('/fcm-token', authenticateJWT, requireAuth, updateFCMToken);
 
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 export default router;

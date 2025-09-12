@@ -6,7 +6,10 @@ import {
   spendPoints,
   awardTaskPoints,
   getPointsHistory,
+<<<<<<< HEAD
   getMyPointsHistory,
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
   getLeaderboard,
   getPointsStats,
   initializeUserPoints,
@@ -25,6 +28,7 @@ const router = Router();
 router.get('/my', authenticateJWT, requireAuth, getMyPoints);
 
 /**
+<<<<<<< HEAD
  * @route   GET /api/user-points/history
  * @desc    Get current user's points history
  * @access  Private
@@ -32,6 +36,8 @@ router.get('/my', authenticateJWT, requireAuth, getMyPoints);
 router.get('/history', authenticateJWT, requireAuth, getMyPointsHistory);
 
 /**
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
  * @route   GET /api/user-points/leaderboard
  * @desc    Get points leaderboard
  * @access  Public

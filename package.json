@@ -27,12 +27,16 @@
     "@ffprobe-installer/ffprobe": "^2.1.2",
     "@google-cloud/storage": "^7.7.0",
     "@react-native-firebase/auth": "^23.3.0",
+<<<<<<< HEAD
     "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/express-session": "^1.18.2",
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.11",
     "@types/uuid": "^9.0.7",
+=======
+    "@types/express-session": "^1.18.2",
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
@@ -55,9 +59,19 @@
     "oauth-1.0a": "^2.2.6",
     "pg": "^8.16.3",
     "react-native-mmkv": "^3.3.1",
+<<<<<<< HEAD
     "react-native-video": "^6.16.1",
     "redis": "^5.8.2",
     "uuid": "^9.0.1"
+=======
+    "redis": "^5.8.2",
+    "uuid": "^9.0.1",
+    "@types/cors": "^2.8.17",
+    "@types/morgan": "^1.9.9",
+    "@types/compression": "^1.7.5",
+    "@types/uuid": "^9.0.7",
+    "@types/multer": "^1.4.11"
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -67,8 +81,15 @@
     "@types/helmet": "^4.0.0",
     "@types/jest": "^29.5.8",
     "@types/jsonwebtoken": "^9.0.5",
+<<<<<<< HEAD
     "@types/multer": "^1.4.11",
     "@types/node": "^20.10.5",
+=======
+    
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.10.5",
+    
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "eslint": "^8.56.0",

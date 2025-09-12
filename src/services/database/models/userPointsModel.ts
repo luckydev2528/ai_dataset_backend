@@ -256,6 +256,7 @@ export class UserPointsModel {
   }
 
   /**
+<<<<<<< HEAD
    * Get approved submissions history for a user
    */
   static async getApprovedSubmissionsHistory(
@@ -338,6 +339,8 @@ export class UserPointsModel {
   }
 
   /**
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
    * Get points statistics
    */
   static async getPointsStats(): Promise<UserPointsStats> {

@@ -3,10 +3,13 @@ import multer from 'multer';
 import { videoStorageService, VideoUploadOptions } from '../../services/storage/VideoStorageService';
 import { Logger } from '../../utils/logger';
 import { authenticateJWT } from '../../middleware/auth/auth';
+<<<<<<< HEAD
 import { TaskModel } from '../../services/database/models/taskModel';
 import { TaskSubmissionModel } from '../../services/database/models/taskSubmissionModel';
 import { ChallengeModel } from '../../services/database/models/challengeModel';
 import { redisService } from '../../services/cache/RedisService';
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 
 // Configure multer for video uploads with optimized settings
 const upload = multer({
@@ -52,6 +55,7 @@ export class VideoController {
       }
 
       // Validate required fields
+<<<<<<< HEAD
       const { taskId, challengeId, challengePrompt, videoMetadata } = req.body;
       
       Logger.info('📝 Video upload request data', { 
@@ -72,10 +76,18 @@ export class VideoController {
         res.status(400).json({
           success: false,
           error: 'Missing required fields: taskId, challengeId, challengePrompt, videoMetadata'
+=======
+      const { taskId, challengePrompt, videoMetadata } = req.body;
+      if (!taskId || !challengePrompt || !videoMetadata) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required fields: taskId, challengePrompt, videoMetadata'
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
         });
         return;
       }
 
+<<<<<<< HEAD
       // Verify task exists and is active
       Logger.info('🔍 Looking up task', { taskId });
       
@@ -153,6 +165,8 @@ export class VideoController {
         };
       }
 
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
       // Validate and normalize video metadata (may arrive as JSON string from FormData)
       const parsedMetadata = typeof videoMetadata === 'string' ? (() => {
         try { return JSON.parse(videoMetadata); } catch { return {}; }
@@ -224,6 +238,7 @@ export class VideoController {
       });
 
       if (result.success) {
+<<<<<<< HEAD
         try {
           // Create task submission record
           const submissionData: any = {
@@ -283,6 +298,17 @@ export class VideoController {
             error: 'Video uploaded but failed to create submission record'
           });
         }
+=======
+        res.status(200).json({
+          success: true,
+          data: {
+            videoId: result.videoId,
+            downloadUrl: result.downloadUrl,
+            thumbnailUrl: result.thumbnailUrl,
+            metadata: result.metadata
+          }
+        });
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
       } else {
         Logger.error('❌ Video upload failed', { 
           userId, 
@@ -561,6 +587,7 @@ export class VideoController {
       });
     }
   }
+<<<<<<< HEAD
 
   /**
    * Request to view a video with rate limiting
@@ -762,6 +789,8 @@ export class VideoController {
       });
     }
   }
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 }
 
 // Export multer middleware for use in routes with timeout handling

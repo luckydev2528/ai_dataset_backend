@@ -1,8 +1,11 @@
 import { Response } from 'express';
 import { AuthenticatedRequest, ApiResponse, UpdateUserData } from '../../types';
 import { FirebaseWrapper } from '../../services/firebase/firebaseWrapper';
+<<<<<<< HEAD
 import { firestoreService } from '../../services/database/firestoreService';
 import { UserModel } from '../../services/database/models/userModel';
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 import { asyncHandler, AppError } from '../../middleware/error';
 import { requireAuth } from '../../middleware/auth/authHelpers';
 import { createStandardUserObject } from '../../utils/userUtils';
@@ -197,6 +200,7 @@ export const exportUserData = asyncHandler(async (req: AuthenticatedRequest, res
   );
   res.status(statusCode).json(response);
 });
+<<<<<<< HEAD
 
 /**
  * Update user FCM token
@@ -235,3 +239,5 @@ export const updateFCMToken = asyncHandler(async (req: AuthenticatedRequest, res
     res.status(statusCode).json(response);
   }
 });
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b

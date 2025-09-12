@@ -393,6 +393,7 @@ class UserPointsController {
   }
 
   /**
+<<<<<<< HEAD
    * Get current user's points history from approved task submissions
    */
   static async getMyPointsHistory(req: Request, res: Response): Promise<void> {
@@ -444,6 +445,8 @@ class UserPointsController {
   }
 
   /**
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
    * Get points leaderboard
    */
   static async getLeaderboard(req: Request, res: Response): Promise<void> {
@@ -605,7 +608,10 @@ export const addPoints = UserPointsController.addPoints;
 export const spendPoints = UserPointsController.spendPoints;
 export const awardTaskPoints = UserPointsController.awardTaskPoints;
 export const getPointsHistory = UserPointsController.getPointsHistory;
+<<<<<<< HEAD
 export const getMyPointsHistory = UserPointsController.getMyPointsHistory;
+=======
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 export const getLeaderboard = UserPointsController.getLeaderboard;
 export const getPointsStats = UserPointsController.getPointsStats;
 export const initializeUserPoints = UserPointsController.initializeUserPoints;

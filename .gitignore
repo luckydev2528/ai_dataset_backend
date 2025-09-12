@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
 node_modules/
 
 # Environment files
@@ -65,4 +69,11 @@ build/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
+<<<<<<< HEAD
 Thumbs.db
+=======
+Thumbs.db
+=======
+node_modules
+>>>>>>> 98c8eaaf006879486f8615c2ed5ed3bf254de88e
+>>>>>>> cafe11fdc9c284cc2da4ed1877ac8b8aab94138b
